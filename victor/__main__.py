@@ -144,6 +144,31 @@ def cmd_events(args):
             print(f"{e.at.replace(tzinfo=timezone.utc):%Y-%m-%d %H:%M} {e.kind:<16} {e.ref_type or '':<6} {e.ref_id or '':<5} {e.detail}")
 
 
+def cmd_dashboard(args):
+    from .dashboard import write_dashboard
+
+    settings = _setup(args)
+    with session() as s:
+        p = write_dashboard(s, settings)
+    print(p)
+
+
+def cmd_render(args):
+    """Render the card (and clip if ffmpeg exists) for a draft so you can look at it before anything posts."""
+    from .media.fetch import prepare_media
+
+    settings = _setup(args)
+    with session() as s:
+        d = s.get(Draft, args.draft_id)
+        if not d:
+            sys.exit(f"draft {args.draft_id} not found")
+        pub = settings.raw.get("publishing", {})
+        media = prepare_media({"mode": "render"}, d.story.title, d.text, d.story.category,
+                              f"@{pub.get('x_username', '')}", want_clip=not args.image_only)
+        d.media = {**(d.media or {}), **media}
+    print(f"{media.get('kind', 'image')}: {media.get('path')}")
+
+
 def cmd_telegram(args):
     """Long-poll Telegram locally so buttons and commands work while you test (Ctrl+C to stop)."""
     import time
@@ -221,6 +246,11 @@ def main(argv=None):
     n = sub.add_parser("note")
     n.add_argument("text")
     n.set_defaults(fn=cmd_note)
+    sub.add_parser("dashboard", help="write the static dashboard to docs/index.html").set_defaults(fn=cmd_dashboard)
+    rd = sub.add_parser("render", help="render the card/clip for a draft")
+    rd.add_argument("draft_id", type=int)
+    rd.add_argument("--image-only", action="store_true")
+    rd.set_defaults(fn=cmd_render)
     sub.add_parser("telegram", help="long-poll Telegram for buttons and commands").set_defaults(fn=cmd_telegram)
     sub.add_parser("test-ai", help="draft one sample post with the configured provider").set_defaults(fn=cmd_test_ai)
     sub.add_parser("test-x", help="check X credentials").set_defaults(fn=cmd_test_x)

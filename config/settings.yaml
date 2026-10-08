@@ -79,3 +79,7 @@ educational:
 digest:
   weekday: 0                   # Monday
   hour: 8                      # local time
+
+dashboard:
+  enabled: true                # writes docs/index.html after each run (serve with GitHub Pages, free)
+  show_drafts: false           # the repo is public; keep draft text out of the page unless you want it there

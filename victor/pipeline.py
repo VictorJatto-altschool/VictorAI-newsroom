@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .ai.draft import ProviderError, SourceView, generate, pick_provider, run_checks
@@ -21,8 +21,10 @@ from .intelligence.cluster import Candidate, best_match
 from .intelligence.filter import filter_reason
 from .intelligence.rules import PostingHistory, decide, in_window, limits_ok, window_opened_at
 from .intelligence.score import StoryFacts, novelty_from_recent, score_story
+from .ai.educational import generate_educational
 from .media.extract import choose_media, find_media
-from .models import Draft, Event, Item, Post, Run, Source, State, Story
+from .media.fetch import prepare_media
+from .models import Draft, Event, Item, Note, Post, Run, Source, State, Story
 from .publish.base import PublishRequest
 from .publish.mock import MockPublisher
 from .publish.x import XPublisher
@@ -314,7 +316,81 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
     return made
 
 
+def draft_educational(s: Session, settings: Settings, stats: dict[str, Any], now: datetime | None = None,
+                      provider=None, channel=None) -> Draft | None:
+    """At most N per day, from the oldest unused operator note. Always routed to review."""
+    now = now or utcnow()
+    cfg = settings.raw.get("educational", {})
+    stats["edu_drafts"] = 0
+    if not cfg.get("enabled", True):
+        return None
+    note = s.scalars(select(Note).where(Note.used.is_(False)).order_by(Note.id)).first()
+    if not note:
+        return None
+    since = now - timedelta(days=1)
+    today = s.scalar(select(func.count(Story.id)).where(Story.category == "educational", Story.first_seen_at >= since))
+    if today >= int(cfg.get("max_per_day", 1)):
+        return None
+    provider = provider or pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
+    channel = channel or _channel(settings)
+    try:
+        out = generate_educational(provider, settings.voice, note.text)
+    except ProviderError as e:
+        event(s, "draft_failed", "note", note.id, error=str(e)[:300])
+        return None
+    story = Story(title=f"Note: {note.text[:90]}", category="educational", entities=[], first_seen_at=now,
+                  last_updated_at=now, source_count=1, classification="developing", status="drafted")
+    s.add(story)
+    s.flush()
+    checks = run_checks(out.text, [], settings.drafting, check_links=False)
+    draft = Draft(story=story, text=out.text, reply_text="", why=out.why, reason=out.reason, provider=out.provider,
+                  model=out.model, source_item_ids=[], media={"mode": "render", "rights": "original"}, checks=checks,
+                  checks_passed=checks["passed"], route="review", status="pending", dev_mode=settings.env.dev_mode)
+    s.add(draft)
+    note.used = True
+    s.flush()
+    event(s, "draft_created", "draft", draft.id, story_id=story.id, route="review", reasons=["educational"], note_id=note.id)
+    card = DraftCard(draft_id=draft.id, story_title=story.title, text=out.text, why=out.why, reason=out.reason, score=0,
+                     classification="educational", sources=[("operator note", f"note #{note.id}")], media=draft.media,
+                     checks=checks, route="review", dev_mode=settings.env.dev_mode, tags=["educational"])
+    draft.channel_ref = channel.send_draft(card)
+    stats["edu_drafts"] = 1
+    return draft
+
+
+def maybe_send_digest(s: Session, settings: Settings, channel, now: datetime) -> bool:
+    from .channels.commands import digest_text
+
+    cfg = settings.raw.get("digest", {})
+    tz = ZoneInfo(settings.automation.get("timezone", "UTC"))
+    local = now.astimezone(tz)
+    if local.weekday() != int(cfg.get("weekday", 0)) or local.hour < int(cfg.get("hour", 8)):
+        return False
+    week = f"{local.isocalendar().year}-{local.isocalendar().week}"
+    if get_state(s, "last_digest_week", "") == week:
+        return False
+    channel.notify(digest_text(s, settings, now))
+    set_state(s, "last_digest_week", week)
+    return True
+
+
 # ----------------------------------------------------------------------------- publishing
+
+
+def reconcile_uncertain(s: Session, publisher, channel, now: datetime) -> int:
+    """For posts whose submit result was ambiguous, ask the platform whether it exists. Never resubmit."""
+    if not hasattr(publisher, "find_recent"):
+        return 0
+    fixed = 0
+    for p in s.scalars(select(Post).where(Post.status == "uncertain")).all():
+        found = publisher.find_recent(p.text)
+        if found:
+            p.remote_id, p.remote_url, p.status, p.published_at = found[0], found[1], "published", now
+            p.draft.status, p.draft.story.status = "published", "posted"
+            event(s, "reconciled", "post", p.id, url=found[1])
+            channel.notify(f"Reconciled: draft #{p.draft_id} was in fact published: {found[1]}")
+            fixed += 1
+    return fixed
 
 
 def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now: datetime | None = None,
@@ -327,6 +403,8 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
     if paused:
         stats["paused"] = True
         return []
+    stats["reconciled"] = reconcile_uncertain(s, publisher, channel, now)
+    pub_cfg = settings.raw.get("publishing", {})
     tz = ZoneInfo(settings.automation.get("timezone", "UTC"))
     local = now.astimezone(tz)
     night = in_window(local, settings.overnight["window_start"], settings.overnight["window_end"])
@@ -346,8 +424,14 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
         post = Post(draft=d, story_id=d.story_id, idempotency_key=key, text=d.text, autonomous=(d.route == "autonomous"))
         s.add(post)
         s.flush()
+        media = d.media or {}
+        if pub_cfg.get("prepare_media", True) and media.get("mode") in ("upload", "render"):
+            media = prepare_media(media, d.story.title, d.text, d.story.category, f"@{pub_cfg.get('x_username', '')}",
+                                  want_clip=bool(pub_cfg.get("render_clip", True)))
+            d.media = media
         req = PublishRequest(idempotency_key=key, text=d.text, reply_text=d.reply_text,
-                             quote_url=d.media.get("url", "") if d.media.get("mode") == "quote" else "")
+                             quote_url=media.get("url", "") if media.get("mode") == "quote" else "",
+                             media_path=media.get("path", "") if media.get("mode") in ("upload", "render") else "")
         res = publisher.publish(req)
         post.status, post.remote_id, post.remote_url, post.reply_remote_id, post.error = (
             res.status, res.remote_id, res.remote_url, res.reply_remote_id, res.error)
@@ -397,7 +481,13 @@ def run_once(settings: Settings, now: datetime | None = None, **overrides: Any) 
             cluster_items(s, new_items, stats, now)
             rescore(s, settings, stats, now)
             draft_stories(s, settings, stats, now, provider=provider, channel=channel, check_links=check_links)
+            draft_educational(s, settings, stats, now, provider=provider, channel=channel)
             publish_approved(s, settings, stats, now, publisher=publisher, channel=channel)
+            stats["digest_sent"] = maybe_send_digest(s, settings, channel, now)
+            if settings.raw.get("dashboard", {}).get("enabled", True) and overrides.get("dashboard", True):
+                from .dashboard import write_dashboard
+
+                write_dashboard(s, settings, now)
             if hasattr(channel, "get_updates"):  # pick up anything that arrived during the cycle
                 stats["commands_handled"] += process_updates(s, settings, channel, now, provider)
             run.ok = True

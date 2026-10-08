@@ -10,6 +10,11 @@ class MockProvider:
     model = "template-v1"
 
     def complete(self, system: str, user: str, max_tokens: int = 600) -> str:
+        if user.startswith("OPERATOR NOTE:"):
+            note = _between(user, "OPERATOR NOTE:", "--- END NOTE")
+            post = f"[DEV MODE] From the desk: {note[:180]}\n\nTakeaway: pending real AI provider."
+            return json.dumps({"post": post[:280], "why_it_matters": "Placeholder.",
+                               "reason": "educational post from operator note"})
         title = _between(user, "TITLE:", "\n") or "Untitled story"
         publisher = _between(user, "PUBLISHER:", "\n") or "source"
         count = _between(user, "SOURCE_COUNT:", "\n") or "1"
@@ -24,5 +29,5 @@ class MockProvider:
 
 
 def _between(text: str, start: str, end: str) -> str:
-    m = re.search(re.escape(start) + r"\s*(.*?)" + re.escape(end), text)
+    m = re.search(re.escape(start) + r"\s*(.*?)" + re.escape(end), text, re.S)
     return m.group(1).strip() if m else ""
