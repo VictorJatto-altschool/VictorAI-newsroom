@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -293,10 +294,10 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
                             Story.last_updated_at >= now - ACTIVE_WINDOW).order_by(Story.score.desc())
     ).all()
     made: list[Draft] = []
-    limit = int(settings.limits["max_drafts_per_run"])
+    limit = int(settings.limits.get("max_drafts_per_run", 0) or 0)  # 0 = unlimited: the news sets the pace
     stats.update(drafts_made=0, drafts_failed=0)
     for st in eligible:
-        if len(made) >= limit:
+        if limit and len(made) >= limit:
             break
         if st.id in hist.story_ids_recent:
             st.status = "skipped"
@@ -449,6 +450,37 @@ def maybe_send_digest(s: Session, settings: Settings, channel, now: datetime) ->
 # ----------------------------------------------------------------------------- publishing
 
 
+_URL_IN_TEXT = re.compile(r"https?://|\b[a-z0-9-]+\.(com|org|ai|io|gov|net)\b", re.I)
+
+
+def _api_reply_text(d: Draft, mode: str) -> str:
+    """plain: name the publisher, no URL (X charges 13x more for a post containing a URL)."""
+    if mode == "none":
+        return ""
+    if mode == "link":
+        return d.reply_text
+    items = [i for i in d.story.items if i.id in set(d.source_item_ids or [])] or [i for i in d.story.items if not i.filtered_reason]
+    items.sort(key=lambda i: i.source.tier)
+    if not items:
+        return ""
+    primary = items[0]
+    extra = len({normalize_publisher(i.publisher or i.source.name) for i in items}) - 1
+    tail = f" and {extra} other source{'s' if extra != 1 else ''}" if extra > 0 else ""
+    return f"Source: {primary.publisher or primary.source.name}{tail}."
+
+
+def _estimate_cost(d: Draft, pub_cfg: dict) -> float:
+    per_post = float(pub_cfg.get("cost_post_usd", 0.015))
+    per_url = float(pub_cfg.get("cost_post_with_url_usd", 0.200))
+    cost = per_url if _URL_IN_TEXT.search(d.text) else per_post
+    mode = pub_cfg.get("api_reply", "plain")
+    if mode == "link" and d.reply_text:
+        cost += per_url
+    elif mode == "plain":
+        cost += per_post
+    return round(cost, 4)
+
+
 def reconcile_uncertain(s: Session, publisher, channel, now: datetime) -> int:
     """For posts whose submit result was ambiguous, ask the platform whether it exists. Never resubmit."""
     if not hasattr(publisher, "find_recent"):
@@ -483,12 +515,23 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
     drafts = s.scalars(select(Draft).where(Draft.status.in_(("approved", "approved_night"))).order_by(Draft.created_at)).all()
     done: list[Post] = []
     manual = getattr(publisher, "name", "") == "manual"
+    api = getattr(publisher, "name", "") == "x"
+    budget = float(pub_cfg.get("daily_budget_usd", 0.25))
+    spent_today = float(s.scalar(select(func.coalesce(func.sum(Post.cost_usd), 0.0))
+                                 .where(Post.created_at >= now - timedelta(days=1))) or 0.0)
+    stats["api_spent_today_usd"] = round(spent_today, 3)
     for d in drafts:
         if d.status == "approved_night" and not night and not manual:
             stats["posts_deferred"] += 1
             continue
+        est = _estimate_cost(d, pub_cfg) if api else 0.0
+        if api and spent_today + est > budget:
+            stats["posts_deferred"] += 1
+            stats["budget_blocked"] = True
+            continue
         hist = _history(s, settings, now)
-        if limits_ok(now, settings.limits, hist):
+        enforce = not manual or bool(settings.limits.get("apply_to_manual", False))
+        if enforce and limits_ok(now, settings.limits, hist):
             stats["posts_deferred"] += 1
             continue
         key = f"draft-{d.id}-v{d.version}"
@@ -502,10 +545,15 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
             media = prepare_media(media, d.story.title, d.text, d.story.category, f"@{pub_cfg.get('x_username', '')}",
                                   want_clip=bool(pub_cfg.get("render_clip", True)))
             d.media = media
-        req = PublishRequest(idempotency_key=key, text=d.text, reply_text=d.reply_text,
+        reply = d.reply_text
+        if api:
+            reply = _api_reply_text(d, pub_cfg.get("api_reply", "plain"))
+            post.cost_usd = est
+            spent_today += est
+        req = PublishRequest(idempotency_key=key, text=d.text, reply_text=reply,
                              quote_url=media.get("url", "") if media.get("mode") == "quote" else "",
                              media_path=media.get("path", "") if media.get("mode") in ("upload", "render") else "")
-        if getattr(publisher, "name", "") == "manual":
+        if manual:
             publisher.draft_id = d.id
         res = publisher.publish(req)
         post.status, post.remote_id, post.remote_url, post.reply_remote_id, post.error = (

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 
 import httpx
@@ -51,6 +52,7 @@ class TelegramChannel:
     def send_draft(self, card: DraftCard) -> str | None:
         res = self._call("sendMessage", chat_id=self.chat_id, text=render_card(card)[:4000],
                          disable_web_page_preview=False, reply_markup=draft_keyboard(card.draft_id))
+        time.sleep(0.6)  # Telegram allows ~1 message/second per chat; a busy news hour can mean dozens of cards
         return str(res["message_id"]) if res else None
 
     def notify(self, text: str) -> None:

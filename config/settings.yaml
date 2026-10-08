@@ -20,7 +20,8 @@ limits:
   min_gap_minutes: 45
   story_cooldown_days: 7
   entity_cooldown_days: 3
-  max_drafts_per_run: 3
+  max_drafts_per_run: 0        # 0 = no cap: every story that reaches "trending" or above is drafted and sent to you
+  apply_to_manual: false       # posting limits only bind automatic (API) posting; when you post by hand, you decide
 
 scoring:
   weights:
@@ -65,13 +66,19 @@ drafting:
   provider_order: [gemini, compat, groq, mock]   # compat = AI_BASE_URL in .env (GitHub Models, OpenRouter, Mistral, Cerebras, Ollama)
 
 publishing:
-  mode: intent                 # intent = free: Approve sends an "Open in X" button to your phone. api = paid X API.
+  mode: intent                 # intent = free: Approve sends an "Open in X" button to your phone. api = X API pay-per-use.
   enabled: true
   x_username: SI4blog_
+  # X API pay-per-use (docs.x.com, Oct 2026): post $0.015, post containing a URL $0.200, quote via id $0.015.
+  api_reply: plain             # plain = "Source: <publisher>" with no URL ($0.015) | link = full URL ($0.200) | none
+  daily_budget_usd: 0.25       # API mode refuses to post once today's estimated spend reaches this
+  cost_post_usd: 0.015
+  cost_post_with_url_usd: 0.200
 
 growth:                        # X program targets; keep in sync with X's current official rules
   follower_target: 500
   impressions_target_90d: 500000
+  sync_daily: true             # API mode only: read your own follower count once a day (User: Read, $0.01)
 
 educational:
   enabled: true

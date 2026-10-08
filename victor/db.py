@@ -32,6 +32,27 @@ def init_engine(database_url: str = "") -> None:
     _SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
     from . import models  # noqa: F401  (register tables)
     Base.metadata.create_all(_engine)
+    _ensure_columns(_engine)
+
+
+# Columns added after the first release. create_all never alters existing tables, so add them here.
+_ADDED_COLUMNS = {
+    "posts": {"cost_usd": "FLOAT DEFAULT 0.0"},
+}
+
+
+def _ensure_columns(engine) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table, cols in _ADDED_COLUMNS.items():
+            if table not in insp.get_table_names():
+                continue
+            existing = {c["name"] for c in insp.get_columns(table)}
+            for name, ddl in cols.items():
+                if name not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
 
 
 @contextmanager

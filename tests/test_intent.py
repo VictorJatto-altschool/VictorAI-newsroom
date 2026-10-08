@@ -68,10 +68,11 @@ def test_approve_hands_off_to_phone_and_posted_confirms(fresh_db, now):
         assert s.scalar(select(Post).where(Post.draft_id == did)).remote_url.endswith("1975999999999999999")
 
 
-def test_handoffs_count_toward_daily_limit(fresh_db, now):
+def test_handoffs_count_toward_daily_limit_when_enabled(fresh_db, now):
     settings = _settings()
     settings.raw["publishing"]["prepare_media"] = False
     settings.raw["limits"]["max_posts_per_day"] = 1
+    settings.raw["limits"]["apply_to_manual"] = True
     tg = FakeTelegramIntent()
     run_once(settings, now, fetcher=make_fetcher(now), provider=MockProvider(), channel=tg, publisher=MockPublisher(), check_links=False)
     with session() as s:

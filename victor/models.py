@@ -120,6 +120,7 @@ class Post(Base):
     status: Mapped[str] = mapped_column(String(20), default="queued")
     autonomous: Mapped[bool] = mapped_column(Boolean, default=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)  # estimated API spend for this post
     text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

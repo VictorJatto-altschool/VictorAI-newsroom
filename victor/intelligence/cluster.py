@@ -6,6 +6,9 @@ from datetime import datetime, timedelta, timezone
 
 from rapidfuzz import fuzz
 
+from ..collect.normalize import ENTITY_HINTS
+
+BRANDS = {e.lower() for e in ENTITY_HINTS}
 TITLE_SIM_THRESHOLD = 72  # token-set ratio 0-100
 ENTITY_MIN_SHARED = 2
 WINDOW = timedelta(hours=48)
@@ -42,6 +45,11 @@ def same_story(title: str, entities: list[str], when: datetime | None, cand: Can
         return False, "outside_window"
     sim = title_similarity(title, cand.title)
     shared = shared_entities(entities, cand.entities)
+    # Two stories naming different known companies are different stories, however alike the headlines read.
+    brands_a = {e.lower() for e in entities} & BRANDS
+    brands_b = {e.lower() for e in cand.entities} & BRANDS
+    if brands_a and brands_b and not (brands_a & brands_b):
+        return False, f"different_brands={sorted(brands_a)}|{sorted(brands_b)}"
     if sim >= 88:
         return True, f"title_sim={sim:.0f}"
     if sim >= TITLE_SIM_THRESHOLD and len(shared) >= 1:
