@@ -316,6 +316,53 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
     return made
 
 
+def draft_one(s: Session, settings: Settings, story: Story, now: datetime, provider=None, channel=None,
+              check_links: bool | None = None, official_only_quote: bool = True) -> Draft | None:
+    """Draft a single story on operator request, bypassing the score threshold but not the checks or rules."""
+    provider = provider or pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
+    channel = channel or _channel(settings)
+    if check_links is None:
+        check_links = bool(settings.drafting.get("check_links", True))
+    hist = _history(s, settings, now)
+    paused = get_state(s, "paused", str(settings.automation.get("paused", False))).lower() == "true"
+    mode = get_state(s, "mode", settings.automation.get("mode", "approval"))
+    items = sorted((i for i in story.items if not i.filtered_reason), key=lambda i: i.source.tier)
+    views = [SourceView(i.id, i.publisher or i.source.name, i.source.tier, i.title, i.summary, i.original_url) for i in items]
+    if not views:
+        return None
+    try:
+        out = generate(provider, settings.voice, story.title, story.category, views)
+    except ProviderError as e:
+        event(s, "draft_failed", "story", story.id, error=str(e)[:300], provider=provider.name)
+        return None
+    checks = run_checks(out.text, views, settings.drafting, check_links=check_links)
+    media_refs = [m for i in items for m in (i.media or [])]
+    # An operator-submitted X link may be quoted even if the author is not a configured official handle:
+    # the operator chose it. Everything else keeps the official-only rule.
+    handles = _official_handles(settings)
+    if not official_only_quote:
+        handles |= {m["author"].lower() for m in media_refs if m.get("type") == "x_post"}
+    media = choose_media(media_refs, handles)
+    dec = decide(now_utc=now, settings=settings.raw, story_category=story.category, story_text=f"{story.title} {out.text}",
+                 story_entities=story.entities, story_id=story.id, tier1_count=story.tier1_count,
+                 other_count=max(story.source_count - (1 if story.tier1_count else 0), 0), checks_passed=checks["passed"],
+                 hist=hist, paused=paused, mode=mode)
+    route = "review" if dec.allowed else "blocked"  # operator-submitted stories are never autonomous
+    draft = Draft(story=story, text=out.text, reply_text=f"Source: {views[0].url}", why=out.why, reason=out.reason,
+                  provider=out.provider, model=out.model, source_item_ids=[v.item_id for v in views], media=media,
+                  checks=checks, checks_passed=checks["passed"], route=route, dev_mode=settings.env.dev_mode,
+                  status="blocked" if route == "blocked" else "pending")
+    s.add(draft)
+    story.status = "drafted"
+    s.flush()
+    event(s, "draft_created", "draft", draft.id, story_id=story.id, route=route, reasons=dec.reasons + ["operator"])
+    card = DraftCard(draft_id=draft.id, story_title=story.title, text=out.text, why=out.why, reason=out.reason,
+                     score=story.score, classification=story.classification, sources=[(v.publisher, v.url) for v in views],
+                     media=media, checks=checks, route=route, dev_mode=settings.env.dev_mode, tags=dec.reasons + ["operator"])
+    draft.channel_ref = channel.send_draft(card)
+    return draft
+
+
 def draft_educational(s: Session, settings: Settings, stats: dict[str, Any], now: datetime | None = None,
                       provider=None, channel=None) -> Draft | None:
     """At most N per day, from the oldest unused operator note. Always routed to review."""

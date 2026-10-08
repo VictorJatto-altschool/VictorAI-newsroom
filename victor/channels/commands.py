@@ -30,6 +30,7 @@ HELP = """Commands:
 /note <text> - save a tool note for educational posts
 /growth <followers> <verified_impressions_90d> - record numbers from X analytics
 /digest - weekly summary now
+/story <link> [angle] - draft a story you found yourself; an X post link is quoted so its video plays
 Reply to a draft card with new text to edit it. Buttons: Approve, Approve for night, Rewrite, Reject."""
 
 
@@ -275,6 +276,24 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
             tg.notify(growth_text(s, settings))
     elif cmd == "/digest":
         tg.notify(digest_text(s, settings, now))
+    elif cmd == "/story":
+        from ..collect.manual import ingest_url
+        from ..pipeline import draft_one
+
+        parts = arg.split(maxsplit=1)
+        url = parts[0] if parts else ""
+        if not url.startswith("http"):
+            tg.notify("Usage: /story <link to article or X post> [your note on the angle]")
+        else:
+            note = parts[1] if len(parts) > 1 else ""
+            try:
+                story = ingest_url(s, settings, url, note=note, now=now)
+            except Exception as e:  # noqa: BLE001
+                tg.notify(f"Could not read that link: {type(e).__name__}: {e}")
+                return
+            d = draft_one(s, settings, story, now, channel=tg, official_only_quote=False)
+            if d is None:
+                tg.notify("Read the link but could not draft it (AI provider failed). Try again.")
     else:
         tg.notify("Unknown command. /help")
 

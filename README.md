@@ -38,6 +38,9 @@ That fetches the real feeds in `config/sources.yaml`, stores everything in `data
 | `python -m victor test-ai` | draft one sample post with the configured AI provider |
 | `python -m victor test-x` | check the X credentials and show whether publishing is enabled |
 | `python -m victor dashboard` | rewrite `docs/index.html` |
+| `python -m victor story <link> --note "angle"` | draft a story you found yourself; an X post link is quoted so its video plays |
+| `python -m victor serve` | dashboard at http://localhost:8787/ |
+| `python -m victor loop --minutes 20` | run cycles continuously while the laptop is on, Telegram polled in between |
 
 Tests: `pytest -q` (45 tests, no network).
 

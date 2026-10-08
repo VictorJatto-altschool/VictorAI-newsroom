@@ -144,6 +144,66 @@ def cmd_events(args):
             print(f"{e.at.replace(tzinfo=timezone.utc):%Y-%m-%d %H:%M} {e.kind:<16} {e.ref_type or '':<6} {e.ref_id or '':<5} {e.detail}")
 
 
+def cmd_story(args):
+    """Hand the newsroom a link you found: it becomes a story and is drafted right away."""
+    from .collect.manual import ingest_url
+    from .pipeline import draft_one
+
+    settings = _setup(args)
+    with session() as s:
+        story = ingest_url(s, settings, args.url, note=args.note or "", category=args.category)
+        d = draft_one(s, settings, story, utcnow(), official_only_quote=False)
+        if d is None:
+            sys.exit("could not draft (provider failed)")
+        print(f"draft #{d.id} route={d.route} media={d.media.get('mode')} {d.media.get('url', '')}")
+
+
+def cmd_serve(args):
+    """Serve the static dashboard on localhost."""
+    import http.server
+    import functools
+
+    from .config import ROOT
+
+    _setup(args)
+    docs = ROOT / "docs"
+    if not (docs / "index.html").exists():
+        from .dashboard import write_dashboard
+
+        with session() as s:
+            write_dashboard(s, load_settings())
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(docs))
+    print(f"dashboard: http://localhost:{args.port}/   (Ctrl+C to stop)")
+    http.server.ThreadingHTTPServer(("127.0.0.1", args.port), handler).serve_forever()
+
+
+def cmd_loop(args):
+    """Run a cycle every N minutes while the laptop is on, with Telegram polled in between."""
+    import time
+
+    from .ai.draft import pick_provider
+    from .channels.commands import process_updates
+    from .channels.telegram import TelegramChannel
+
+    settings = _setup(args)
+    tg = TelegramChannel(settings.env.telegram_bot_token, settings.env.telegram_chat_id) if settings.env.has_telegram else None
+    provider = pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
+    print(f"loop: cycle every {args.minutes} min; Telegram {'on' if tg else 'off'}; Ctrl+C to stop")
+    while True:
+        try:
+            stats = run_once(settings)
+            print(f"{utcnow():%H:%M} cycle ok: {stats.get('items_new', 0)} new items, {stats.get('drafts_made', 0)} drafts, "
+                  f"{stats.get('posts_published', 0)} published, {stats.get('posts_mock', 0)} simulated")
+        except Exception as e:  # noqa: BLE001
+            print(f"{utcnow():%H:%M} cycle FAILED: {type(e).__name__}: {e}")
+        deadline = time.time() + args.minutes * 60
+        while time.time() < deadline:
+            if tg:
+                with session() as s:
+                    process_updates(s, settings, tg, provider=provider)
+            time.sleep(3)
+
+
 def cmd_dashboard(args):
     from .dashboard import write_dashboard
 
@@ -247,6 +307,17 @@ def main(argv=None):
     n.add_argument("text")
     n.set_defaults(fn=cmd_note)
     sub.add_parser("dashboard", help="write the static dashboard to docs/index.html").set_defaults(fn=cmd_dashboard)
+    st = sub.add_parser("story", help="draft a story from a link you found")
+    st.add_argument("url")
+    st.add_argument("--note", default="")
+    st.add_argument("--category", default="tech")
+    st.set_defaults(fn=cmd_story)
+    sv = sub.add_parser("serve", help="serve the dashboard at http://localhost:8787/")
+    sv.add_argument("--port", type=int, default=8787)
+    sv.set_defaults(fn=cmd_serve)
+    lp = sub.add_parser("loop", help="run cycles continuously while the laptop is on")
+    lp.add_argument("--minutes", type=int, default=20)
+    lp.set_defaults(fn=cmd_loop)
     rd = sub.add_parser("render", help="render the card/clip for a draft")
     rd.add_argument("draft_id", type=int)
     rd.add_argument("--image-only", action="store_true")
