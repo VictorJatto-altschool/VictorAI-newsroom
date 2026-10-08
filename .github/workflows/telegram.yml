@@ -39,4 +39,12 @@ jobs:
           cache: pip
       - run: sudo apt-get install -y -qq ffmpeg fonts-dejavu-core >/dev/null
       - run: pip install ".[postgres]"
+      - name: Config check (names and lengths only, never values)
+        run: |
+          python - <<'PY'
+          import os
+          for k in ("DATABASE_URL","TELEGRAM_BOT_TOKEN","TELEGRAM_CHAT_ID","GROQ_API_KEY","ANTHROPIC_API_KEY"):
+              v = os.environ.get(k, "")
+              print(f"{k:<20} {'set (' + str(len(v)) + ' chars)' if v.strip() else 'EMPTY'}")
+          PY
       - run: python -m victor telegram --max-minutes 350 --quiet

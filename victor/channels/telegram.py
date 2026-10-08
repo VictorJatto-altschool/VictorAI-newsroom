@@ -41,8 +41,8 @@ class TelegramChannel:
         try:
             r = httpx.post(f"{self._base}/{method}", json=payload, timeout=self._timeout)
             data = r.json()
-        except (httpx.HTTPError, ValueError) as e:
-            log.warning("telegram %s failed: %s", method, e)
+        except Exception as e:  # noqa: BLE001  a channel failure must never end a cycle
+            log.warning("telegram %s failed: %s: %s", method, type(e).__name__, str(e)[:160])
             return None
         if not data.get("ok"):
             log.warning("telegram %s rejected: %s", method, str(data)[:200])

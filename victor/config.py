@@ -113,7 +113,10 @@ class Settings:
 
 def load_env(dotenv_path: Path | None = None) -> Env:
     load_dotenv(dotenv_path or ROOT / ".env", override=False)
-    g = os.environ.get
+
+    def g(key: str, default: str = "") -> str:
+        # Secrets pasted into GitHub or .env often carry a trailing newline or quotes; never let that reach a URL.
+        return (os.environ.get(key) or default).strip().strip('"').strip("'").strip()
     return Env(
         app_env=g("APP_ENV", "development"),
         database_url=g("DATABASE_URL", ""),
