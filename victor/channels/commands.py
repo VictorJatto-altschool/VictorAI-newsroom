@@ -48,7 +48,12 @@ def process_updates(s: Session, settings: Settings, tg, now: datetime | None = N
     from ..pipeline import get_state, set_state  # local import avoids a cycle
 
     now = now or _utcnow()
-    offset = int(get_state(s, "telegram_offset", "0") or 0) or None
+    # Always read the offset fresh from the database: a second process (the `telegram` poller) may have
+    # advanced it while this session was busy, and a stale value would replay taps it already handled.
+    from ..models import State
+
+    row = s.execute(select(State).where(State.key == "telegram_offset").execution_options(populate_existing=True)).scalar_one_or_none()
+    offset = int(row.value) if row and row.value else None
     updates = tg.get_updates(offset)
     handled = 0
     for u in updates:
