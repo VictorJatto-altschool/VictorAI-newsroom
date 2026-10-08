@@ -24,7 +24,7 @@ def _item(url, title, publisher, published, summary=""):
 def make_fetcher(now):
     story_a = [
         ("OpenAI News", "https://openai.com/index/gpt-6", "Introducing GPT-6: a 2M token context window", now - timedelta(minutes=50)),
-        ("OpenAI YouTube", "https://www.youtube.com/watch?v=GPT6launch01", "Introducing GPT-6", now - timedelta(minutes=48)),
+        ("OpenAI YouTube", "https://www.youtube.com/watch?v=GPT6launch0", "Introducing GPT-6", now - timedelta(minutes=48)),
         ("TechCrunch AI", "https://techcrunch.com/gpt6?utm_source=rss", "OpenAI launches GPT-6 with 2M token context", now - timedelta(minutes=40)),
         ("The Verge AI", "https://theverge.com/gpt6", "OpenAI's GPT-6 arrives with a 2M context window", now - timedelta(minutes=30)),
         ("Google News AI labs", "https://news.google.com/rss/articles/abc", "Introducing GPT-6: a 2M token context window", now - timedelta(minutes=45)),
@@ -61,7 +61,7 @@ def test_full_cycle_clusters_scores_drafts_and_mock_publishes(fresh_db, settings
         assert d.route == "review" and d.status == "pending" and d.checks_passed and d.dev_mode
         assert d.media["mode"] == "quote" and "OpenAI" in d.media["url"]
         assert d.source_item_ids and d.reply_text.startswith("Source: https://openai.com")
-        assert "Video: https://www.youtube.com/watch?v=GPT6launch01" in d.reply_text
+        assert "Video: https://www.youtube.com/watch?v=GPT6launch0" in d.reply_text
         assert "[DEV MODE]" in capsys.readouterr().out
         d.status = "approved"
     stats2 = {}

@@ -254,6 +254,12 @@ def _official_handles(settings: Settings) -> set[str]:
     return {c.x_handle.lstrip("@").lower() for c in settings.sources if c.x_handle}
 
 
+def _source_order(i: Item, now: datetime) -> tuple:
+    """Best tier first; within a tier, written sources before videos, then newest first."""
+    is_video = 1 if i.source.kind == "youtube" or "youtube.com" in i.original_url else 0
+    return (i.source.tier, is_video, -(_aware(i.published_at) or now).timestamp())
+
+
 def _reply_text(views: list[SourceView], media_refs: list[dict]) -> str:
     """First reply: the article source, plus the official video link when one exists (links stay out of the post)."""
     if not views:
@@ -288,7 +294,7 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
             st.status = "skipped"
             event(s, "story_skipped", "story", st.id, reason="story_cooldown")
             continue
-        items = sorted((i for i in st.items if not i.filtered_reason), key=lambda i: (i.source.tier, -(_aware(i.published_at) or now).timestamp()))
+        items = sorted((i for i in st.items if not i.filtered_reason), key=lambda i: _source_order(i, now))
         views = [SourceView(i.id, i.publisher or i.source.name, i.source.tier, i.title, i.summary, i.original_url) for i in items]
         try:
             out = generate(provider, settings.voice, st.title, st.category, views)
@@ -337,7 +343,7 @@ def draft_one(s: Session, settings: Settings, story: Story, now: datetime, provi
     hist = _history(s, settings, now)
     paused = get_state(s, "paused", str(settings.automation.get("paused", False))).lower() == "true"
     mode = get_state(s, "mode", settings.automation.get("mode", "approval"))
-    items = sorted((i for i in story.items if not i.filtered_reason), key=lambda i: i.source.tier)
+    items = sorted((i for i in story.items if not i.filtered_reason), key=lambda i: _source_order(i, now))
     views = [SourceView(i.id, i.publisher or i.source.name, i.source.tier, i.title, i.summary, i.original_url) for i in items]
     if not views:
         return None
