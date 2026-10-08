@@ -55,6 +55,10 @@ content_mix:                   # advisory shares, used for tie-breaking only
   space: 10
   analysis: 10
 
+collect:
+  workers: 8                   # feeds fetched at the same time; the watch list takes about as long as its slowest feed
+  due_grace_minutes: 10        # a source is due this many minutes early, so GitHub's late cron starts never skip a cycle
+
 filter:
   max_age_hours: 36
   languages: [en]

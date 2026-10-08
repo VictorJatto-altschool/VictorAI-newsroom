@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -32,6 +33,8 @@ from .publish.x import XPublisher
 
 log = logging.getLogger(__name__)
 ACTIVE_WINDOW = timedelta(hours=48)
+DEFAULT_FETCH_WORKERS = 8      # sources fetched at the same time; a slow feed no longer holds up the rest
+DEFAULT_DUE_GRACE_MINUTES = 10  # GitHub starts cron runs late and unevenly; never skip a source over that jitter
 
 
 def utcnow() -> datetime:
@@ -81,7 +84,14 @@ def sync_sources(s: Session, settings: Settings) -> dict[str, Source]:
     return by_key
 
 
-def _due(row: Source, cfg: SourceConfig, now: datetime) -> bool:
+def _due(row: Source, cfg: SourceConfig, now: datetime, grace: timedelta = timedelta(minutes=DEFAULT_DUE_GRACE_MINUTES)) -> bool:
+    """A source is due once its interval has (nearly) elapsed since the last attempt.
+
+    Scheduled runs are nominally 30 min apart but GitHub starts them minutes late, unevenly. Without a
+    grace period a 30-min source attempted at 10:04 is not due at 10:31 and waits for the 11:00 run,
+    doubling how long a story takes to reach the newsroom. Grace is capped at half the effective interval
+    so backoff after failures still means something.
+    """
     if not row.enabled:
         return False
     if row.blocked_until and _aware(row.blocked_until) > now:
@@ -89,7 +99,39 @@ def _due(row: Source, cfg: SourceConfig, now: datetime) -> bool:
     if row.last_attempt_at is None:
         return True
     backoff = min(2 ** min(row.consecutive_failures, 6), 48) if row.consecutive_failures else 1
-    return now - _aware(row.last_attempt_at) >= timedelta(minutes=cfg.interval_minutes * backoff)
+    interval = timedelta(minutes=cfg.interval_minutes * backoff)
+    return now - _aware(row.last_attempt_at) >= interval - min(grace, interval / 2)
+
+
+def _collect_cfg(settings: Settings) -> dict[str, Any]:
+    return settings.raw.get("collect") or {}
+
+
+def fetch_all(due: list[tuple[SourceConfig, str | None, str | None]], fetcher=fetch_source,
+              workers: int = DEFAULT_FETCH_WORKERS) -> list[FetchResult]:
+    """Fetch every due source concurrently and return results in the same order as `due`.
+
+    Fetching 35+ feeds one after another with a 15 s timeout each could take minutes when a few sources
+    stall; in parallel the whole watch list takes about as long as the slowest single feed.
+    One httpx.Client is shared: it is thread-safe and reuses connections. Nothing in here touches the DB.
+    """
+    if not due:
+        return []
+    workers = max(1, min(int(workers), len(due)))
+    with make_client() as client:
+        if workers == 1:
+            return [fetcher(cfg, etag, lm, client=client) for cfg, etag, lm in due]
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="fetch") as pool:
+            return list(pool.map(lambda d: fetcher(d[0], d[1], d[2], client=client), due))
+
+
+def _existing_urls(s: Session, urls: list[str]) -> set[str]:
+    """One query per 500 URLs instead of one query per item."""
+    seen: set[str] = set()
+    for i in range(0, len(urls), 500):
+        chunk = urls[i:i + 500]
+        seen.update(s.scalars(select(Item.canonical_url).where(Item.canonical_url.in_(chunk))).all())
+    return seen
 
 
 def collect(s: Session, settings: Settings, stats: dict[str, Any], now: datetime | None = None,
@@ -98,43 +140,46 @@ def collect(s: Session, settings: Settings, stats: dict[str, Any], now: datetime
     rows = sync_sources(s, settings)
     new_items: list[Item] = []
     stats.update(sources_checked=0, sources_failed=0, items_seen=0, items_new=0, items_filtered=0)
-    with make_client() as client:
-        for cfg in settings.sources:
-            row = rows[cfg.key]
-            if not _due(row, cfg, now):
+    ccfg = _collect_cfg(settings)
+    grace = timedelta(minutes=float(ccfg.get("due_grace_minutes", DEFAULT_DUE_GRACE_MINUTES)))
+    due_cfgs = [cfg for cfg in settings.sources if _due(rows[cfg.key], cfg, now, grace)]
+    # Read everything the threads need from the ORM rows here, on the session's own thread.
+    due = [(cfg, rows[cfg.key].etag, rows[cfg.key].last_modified) for cfg in due_cfgs]
+    for cfg in due_cfgs:
+        rows[cfg.key].last_attempt_at = now
+    stats["sources_checked"] = len(due)
+    results = fetch_all(due, fetcher=fetcher, workers=int(ccfg.get("workers", DEFAULT_FETCH_WORKERS)))
+    seen = _existing_urls(s, [raw.canonical_url for res in results for raw in res.items if raw.canonical_url])
+    for cfg, res in zip(due_cfgs, results):
+        row = rows[cfg.key]
+        if not res.ok:
+            row.consecutive_failures += 1
+            row.last_error = res.error
+            stats["sources_failed"] += 1
+            event(s, "source_failed", "source", row.id, error=res.error, failures=row.consecutive_failures)
+            continue
+        row.consecutive_failures, row.last_error, row.last_success_at = 0, None, now
+        row.etag, row.last_modified = res.etag, res.last_modified
+        for raw in res.items:
+            stats["items_seen"] += 1
+            if not raw.canonical_url or raw.canonical_url in seen:
                 continue
-            stats["sources_checked"] += 1
-            row.last_attempt_at = now
-            res: FetchResult = fetcher(cfg, row.etag, row.last_modified, client=client)
-            if not res.ok:
-                row.consecutive_failures += 1
-                row.last_error = res.error
-                stats["sources_failed"] += 1
-                event(s, "source_failed", "source", row.id, error=res.error, failures=row.consecutive_failures)
-                continue
-            row.consecutive_failures, row.last_error, row.last_success_at = 0, None, now
-            row.etag, row.last_modified = res.etag, res.last_modified
-            for raw in res.items:
-                stats["items_seen"] += 1
-                if not raw.canonical_url:
-                    continue
-                if s.scalar(select(Item.id).where(Item.canonical_url == raw.canonical_url)):
-                    continue
-                reason = filter_reason(raw, settings.filter, now)
-                item = Item(
-                    source=row, external_id=(raw.external_id or "")[:300] or None,
-                    canonical_url=raw.canonical_url, original_url=raw.original_url, title=raw.title,
-                    summary=raw.summary, publisher=raw.publisher or row.name, author=raw.author,
-                    published_at=raw.published_at or now, discovered_at=now, entities=raw.entities,
-                    media=find_media(f"{raw.raw_html} {raw.original_url}", raw.summary, host_of(raw.original_url)),
-                    filtered_reason=reason,
-                )
-                s.add(item)
-                stats["items_new"] += 1
-                if reason:
-                    stats["items_filtered"] += 1
-                else:
-                    new_items.append(item)
+            seen.add(raw.canonical_url)
+            reason = filter_reason(raw, settings.filter, now)
+            item = Item(
+                source=row, external_id=(raw.external_id or "")[:300] or None,
+                canonical_url=raw.canonical_url, original_url=raw.original_url, title=raw.title,
+                summary=raw.summary, publisher=raw.publisher or row.name, author=raw.author,
+                published_at=raw.published_at or now, discovered_at=now, entities=raw.entities,
+                media=find_media(f"{raw.raw_html} {raw.original_url}", raw.summary, host_of(raw.original_url)),
+                filtered_reason=reason,
+            )
+            s.add(item)
+            stats["items_new"] += 1
+            if reason:
+                stats["items_filtered"] += 1
+            else:
+                new_items.append(item)
     s.flush()
     return new_items
 

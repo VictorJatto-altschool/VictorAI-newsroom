@@ -65,7 +65,7 @@ Once `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set, every draft arrives as
 
 ## How a story becomes a post
 
-1. Feeds are fetched with conditional GET; a failing source backs off and never stops the others.
+1. Feeds are fetched in parallel (`collect.workers` in `settings.yaml`) with conditional GET, so a run takes about as long as its slowest feed; a failing source backs off and never stops the others. A source counts as due a few minutes early (`collect.due_grace_minutes`), so GitHub's late cron starts never make a feed wait for the next cycle.
 2. Items are normalized and cheaply filtered (old, off-topic, sponsored, non-English).
 3. Items about the same event are clustered into one story. Google News copies of an official post count as the same publisher.
 4. Stories are scored from counts only. One source never reaches "trending" unless it is an official announcement under 3 hours old.
