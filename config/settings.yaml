@@ -30,6 +30,7 @@ scoring:
     tier1_present: 25
     novelty: 15
     category_weight: 15
+  official_fresh_hours: 24     # an official announcement counts as postable on its own for this long
   thresholds:
     breaking: 85
     hot: 70
@@ -62,7 +63,7 @@ filter:
   min_title_chars: 12          # video titles are short ("Introducing GPT-6")
 
 drafting:
-  max_chars: 280
+  max_chars: 600               # account is X Premium (long posts allowed); 600 keeps posts scannable
   provider_order: [gemini, compat, groq, mock]   # compat = AI_BASE_URL in .env (GitHub Models, OpenRouter, Mistral, Cerebras, Ollama)
 
 publishing:

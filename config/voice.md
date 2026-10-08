@@ -24,7 +24,9 @@ and earn a reply by its last.
 
 ## Rules that never bend
 
-- Under 280 characters. Every line earns its place.
+- The account is X Premium, so the limit is 600 characters, but X folds everything after about 280
+  behind "Show more". The hook, what happened and why it matters must all sit inside the first 280.
+  The angle and the question come after the fold. Every line earns its place.
 - Only facts in the sources. Mark rumours as rumours. Attribute quotes to the source that reported them.
 - No hashtags. Emoji: at most one, only in the hook, only if it adds meaning.
 - No URLs in the post. The source goes in the first reply.

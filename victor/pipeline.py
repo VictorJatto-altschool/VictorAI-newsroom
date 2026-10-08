@@ -306,7 +306,7 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
         items = sorted((i for i in st.items if not i.filtered_reason), key=lambda i: _source_order(i, now))
         views = [SourceView(i.id, i.publisher or i.source.name, i.source.tier, i.title, i.summary, i.original_url) for i in items]
         try:
-            out = generate(provider, settings.voice, st.title, st.category, views)
+            out = generate(provider, settings.voice, st.title, st.category, views, int(settings.drafting.get("max_chars", 280)))
         except ProviderError as e:
             stats["drafts_failed"] += 1
             event(s, "draft_failed", "story", st.id, error=str(e)[:300], provider=provider.name)
@@ -357,7 +357,7 @@ def draft_one(s: Session, settings: Settings, story: Story, now: datetime, provi
     if not views:
         return None
     try:
-        out = generate(provider, settings.voice, story.title, story.category, views)
+        out = generate(provider, settings.voice, story.title, story.category, views, int(settings.drafting.get("max_chars", 280)))
     except ProviderError as e:
         event(s, "draft_failed", "story", story.id, error=str(e)[:300], provider=provider.name)
         return None

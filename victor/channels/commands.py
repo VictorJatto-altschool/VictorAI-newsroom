@@ -184,7 +184,15 @@ def rewrite_draft(s: Session, settings: Settings, old: Draft, now: datetime, pro
     views = _views_for(old)
     voice = settings.voice + (f"\n\nOPERATOR NOTE FOR THIS REWRITE: {note}" if note else "")
     try:
-        out = generate(provider, voice, old.story.title, old.story.category, views)
+        if old.story.category == "educational" or not views:
+            from ..ai.educational import generate_educational
+            from ..models import Note
+
+            text = old.story.title.removeprefix("Note: ")
+            n = s.scalar(select(Note).where(Note.text.startswith(text[:60])).order_by(Note.id.desc()))
+            out = generate_educational(provider, voice, n.text if n else text)
+        else:
+            out = generate(provider, voice, old.story.title, old.story.category, views, int(settings.drafting.get("max_chars", 280)))
     except Exception as e:  # noqa: BLE001
         log.warning("rewrite failed: %s", e)
         return None

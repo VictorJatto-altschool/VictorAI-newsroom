@@ -40,9 +40,10 @@ def score_story(f: StoryFacts, cfg: dict[str, Any], now: datetime | None = None)
         parts = {k: v * 0.5 for k, v in parts.items()}
     total = round(sum(parts.values()), 1)
     label = classify(total, cfg["thresholds"])
-    # One source is never "trending" on its own, unless it is an official announcement from the last 3 hours.
+    # One source is never "trending" on its own, unless it is an official announcement that is still fresh.
     now = now or datetime.now(timezone.utc)
-    fresh_official = f.tier1_count > 0 and (now - f.first_seen_at) <= timedelta(hours=3)
+    fresh_hours = float(cfg.get("official_fresh_hours", 24))
+    fresh_official = f.tier1_count > 0 and (now - f.first_seen_at) <= timedelta(hours=fresh_hours)
     if f.source_count < 2 and not fresh_official and label in ("breaking", "hot", "trending"):
         label = "developing"
     return total, {k: round(v, 1) for k, v in parts.items()}, label

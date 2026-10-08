@@ -57,8 +57,13 @@ class Env:
     nasa_api_key: str = ""
 
     @property
+    def has_ai(self) -> bool:
+        return bool(self.gemini_api_key or self.groq_api_key or self.ai_base_url)
+
+    @property
     def dev_mode(self) -> bool:
-        return self.app_env != "production"
+        """Dev mode means the drafts are mock templates. With a real AI provider the output is real."""
+        return self.app_env != "production" and not self.has_ai
 
     @property
     def has_x(self) -> bool:

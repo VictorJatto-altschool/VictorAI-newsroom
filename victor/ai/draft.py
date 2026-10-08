@@ -26,7 +26,7 @@ SYSTEM_PREFIX = (
     "Work in two steps inside your head: first write three candidate hooks using different hook types from the guide, "
     "pick the one an informed reader is most likely to stop on, then write the post under it. "
     "Respond with a JSON object: "
-    '{"post": string under 280 characters, "why_it_matters": one sentence, '
+    '{"post": string within the hard limit, "why_it_matters": one sentence, '
     '"reason": one sentence on why this story is worth posting, "hook_type": one of number|contrast|stakes|question|scoop}.'
 )
 
@@ -78,11 +78,25 @@ def build_user_prompt(title: str, category: str, sources: list[SourceView]) -> s
     return "\n".join(lines)
 
 
-def generate(provider: AIProvider, voice: str, title: str, category: str, sources: list[SourceView]) -> DraftOutput:
-    system = SYSTEM_PREFIX + "\n\nVOICE GUIDE:\n" + voice
+def generate(provider: AIProvider, voice: str, title: str, category: str, sources: list[SourceView],
+             max_chars: int = 280) -> DraftOutput:
+    system = SYSTEM_PREFIX + f"\n\nHARD LIMIT: the post must be under {max_chars} characters including spaces and line breaks.\n\nVOICE GUIDE:\n" + voice
     user = build_user_prompt(title, category, sources)
     raw = provider.complete(system, user)
-    return parse_draft_json(raw, provider.name, provider.model)
+    out = parse_draft_json(raw, provider.name, provider.model)
+    for _ in range(2):  # models overshoot; ask for a tighter cut instead of discarding a good draft
+        if len(out.text) <= max_chars:
+            break
+        shorten = (
+            f"This post is {len(out.text)} characters; the limit is {max_chars}. Rewrite it under {max_chars - 10} characters. "
+            "Keep the hook and the why-it-matters line, drop the least important line first, keep every fact as-is, add nothing. "
+            "Respond with the same JSON object.\n\nPOST:\n" + out.text
+        )
+        raw = provider.complete(system, shorten)
+        shorter = parse_draft_json(raw, provider.name, provider.model)
+        shorter.reason, shorter.why = out.reason or shorter.reason, out.why or shorter.why
+        out = shorter
+    return out
 
 
 _URL_RE = re.compile(r"https?://\S+")
