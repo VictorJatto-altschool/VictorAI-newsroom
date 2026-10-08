@@ -46,6 +46,10 @@ def pick_provider(env: Env, order: list[str]) -> AIProvider:
     from .compat import PRESETS, OpenAICompatProvider
 
     for name in order:
+        if name == "anthropic" and env.anthropic_api_key:
+            from .anthropic_provider import DEFAULT_MODEL, AnthropicProvider
+
+            return AnthropicProvider(env.anthropic_api_key, env.anthropic_model or DEFAULT_MODEL)
         if name == "gemini" and env.gemini_api_key:
             return GeminiProvider(env.gemini_api_key)
         if name == "groq" and env.groq_api_key:

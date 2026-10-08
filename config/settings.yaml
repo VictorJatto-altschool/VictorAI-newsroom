@@ -64,7 +64,7 @@ filter:
 
 drafting:
   max_chars: 600               # account is X Premium (long posts allowed); 600 keeps posts scannable
-  provider_order: [gemini, compat, groq, mock]   # compat = AI_BASE_URL in .env (GitHub Models, OpenRouter, Mistral, Cerebras, Ollama)
+  provider_order: [anthropic, gemini, compat, groq, mock]   # first configured key wins; compat = AI_BASE_URL in .env
 
 publishing:
   mode: intent                 # intent = free: Approve sends an "Open in X" button to your phone. api = X API pay-per-use.

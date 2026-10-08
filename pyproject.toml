@@ -16,6 +16,7 @@ dependencies = [
   "python-dotenv>=1.0",
   "tweepy>=4.14",
   "pillow>=10.0",
+  "anthropic>=1.0",
 ]
 
 [project.optional-dependencies]

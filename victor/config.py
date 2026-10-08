@@ -42,6 +42,8 @@ class Env:
     app_env: str = "development"
     database_url: str = ""
     tz_name: str = "Africa/Lagos"
+    anthropic_api_key: str = ""
+    anthropic_model: str = ""
     gemini_api_key: str = ""
     groq_api_key: str = ""
     ai_base_url: str = ""  # any OpenAI-compatible endpoint (GitHub Models, OpenRouter, Mistral, Cerebras, Ollama)
@@ -58,7 +60,7 @@ class Env:
 
     @property
     def has_ai(self) -> bool:
-        return bool(self.gemini_api_key or self.groq_api_key or self.ai_base_url)
+        return bool(self.anthropic_api_key or self.gemini_api_key or self.groq_api_key or self.ai_base_url)
 
     @property
     def dev_mode(self) -> bool:
@@ -116,6 +118,8 @@ def load_env(dotenv_path: Path | None = None) -> Env:
         app_env=g("APP_ENV", "development"),
         database_url=g("DATABASE_URL", ""),
         tz_name=g("TZ_NAME", "Africa/Lagos"),
+        anthropic_api_key=g("ANTHROPIC_API_KEY", ""),
+        anthropic_model=g("ANTHROPIC_MODEL", ""),
         gemini_api_key=g("GEMINI_API_KEY", ""),
         groq_api_key=g("GROQ_API_KEY", ""),
         ai_base_url=g("AI_BASE_URL", ""),

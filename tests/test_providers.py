@@ -23,6 +23,21 @@ def test_unknown_host_without_model_falls_through_to_mock():
     assert pick_provider(env, ["compat", "mock"]).name == "mock"
 
 
+def test_anthropic_first_when_key_present(monkeypatch):
+    import victor.ai.anthropic_provider as ap
+
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
+
+    monkeypatch.setattr("anthropic.Anthropic", FakeClient)
+    env = Env(anthropic_api_key="sk-ant-x", groq_api_key="q")
+    p = pick_provider(env, ["anthropic", "gemini", "compat", "groq", "mock"])
+    assert p.name == "anthropic" and p.model == ap.DEFAULT_MODEL == "claude-opus-5-5"
+    env2 = Env(anthropic_api_key="sk-ant-x", anthropic_model="claude-sonnet-5-5")
+    assert pick_provider(env2, ["anthropic", "mock"]).model == "claude-sonnet-5-5"
+
+
 def test_order_is_respected():
     env = Env(gemini_api_key="g", groq_api_key="q")
     assert pick_provider(env, ["groq", "gemini", "mock"]).name == "groq"
