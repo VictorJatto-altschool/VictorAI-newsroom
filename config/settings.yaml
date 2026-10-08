@@ -65,7 +65,8 @@ drafting:
   provider_order: [gemini, compat, groq, mock]   # compat = AI_BASE_URL in .env (GitHub Models, OpenRouter, Mistral, Cerebras, Ollama)
 
 publishing:
-  enabled: false               # flip to true only after X API terms are confirmed and `victor test-x` passes
+  mode: intent                 # intent = free: Approve sends an "Open in X" button to your phone. api = paid X API.
+  enabled: true
   x_username: SI4blog_
 
 growth:                        # X program targets; keep in sync with X's current official rules

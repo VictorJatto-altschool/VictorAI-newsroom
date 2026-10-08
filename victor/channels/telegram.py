@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import httpx
 
@@ -54,6 +55,28 @@ class TelegramChannel:
 
     def notify(self, text: str) -> None:
         self._call("sendMessage", chat_id=self.chat_id, text=text[:4000], disable_web_page_preview=True)
+
+    def send_with_buttons(self, text: str, buttons: list[list[dict]]) -> str | None:
+        res = self._call("sendMessage", chat_id=self.chat_id, text=text[:4000], disable_web_page_preview=True,
+                         reply_markup={"inline_keyboard": buttons})
+        return str(res["message_id"]) if res else None
+
+    def send_file(self, path: str, caption: str = "") -> str | None:
+        """Send a local image or video so the operator can save it and attach it in the X composer."""
+        p = Path(path)
+        method, field = ("sendVideo", "video") if p.suffix.lower() in (".mp4", ".mov") else ("sendPhoto", "photo")
+        try:
+            with p.open("rb") as fh:
+                r = httpx.post(f"{self._base}/{method}", data={"chat_id": self.chat_id, "caption": caption[:1000]},
+                               files={field: (p.name, fh)}, timeout=self._timeout + 60)
+            data = r.json()
+        except (httpx.HTTPError, ValueError, OSError) as e:
+            log.warning("telegram %s failed: %s", method, e)
+            return None
+        if not data.get("ok"):
+            log.warning("telegram %s rejected: %s", method, str(data)[:200])
+            return None
+        return str(data["result"]["message_id"])
 
     def mark(self, message_id: str | None, label: str) -> None:
         """Replace the buttons under a card with a single disabled-looking label."""

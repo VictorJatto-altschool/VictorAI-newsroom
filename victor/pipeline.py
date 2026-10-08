@@ -190,7 +190,7 @@ def cluster_items(s: Session, new_items: list[Item], stats: dict[str, Any], now:
 
 def _recent_posts(s: Session, days: float, now: datetime) -> list[Post]:
     since = now - timedelta(days=days)
-    return s.scalars(select(Post).where(Post.created_at >= since, Post.status.in_(("published", "mock")))).all()
+    return s.scalars(select(Post).where(Post.created_at >= since, Post.status.in_(("published", "mock", "manual")))).all()
 
 
 def rescore(s: Session, settings: Settings, stats: dict[str, Any], now: datetime | None = None) -> None:
@@ -241,12 +241,20 @@ def _channel(settings: Settings):
     return TelegramChannel(env.telegram_bot_token, env.telegram_chat_id) if env.has_telegram else ConsoleChannel()
 
 
-def _publisher(settings: Settings):
+def _publisher(settings: Settings, channel=None):
+    """api: X API (paid). intent: hand off to the operator's phone (free). Otherwise mock."""
+    from .publish.intent import ManualPublisher
+
     env = settings.env
     pub_cfg = settings.raw.get("publishing", {})
-    if env.has_x and pub_cfg.get("enabled", False):
+    mode = pub_cfg.get("mode", "intent")
+    if mode == "api" and env.has_x and pub_cfg.get("enabled", False):
         return XPublisher(env.x_api_key, env.x_api_secret, env.x_access_token, env.x_access_secret,
                           username=pub_cfg.get("x_username", ""))
+    if mode == "intent" and pub_cfg.get("enabled", False):
+        ch = channel or _channel(settings)
+        if hasattr(ch, "send_with_buttons"):
+            return ManualPublisher(ch)
     return MockPublisher()
 
 
@@ -460,10 +468,10 @@ def reconcile_uncertain(s: Session, publisher, channel, now: datetime) -> int:
 def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now: datetime | None = None,
                      publisher=None, channel=None) -> list[Post]:
     now = now or utcnow()
-    publisher = publisher or _publisher(settings)
     channel = channel or _channel(settings)
+    publisher = publisher or _publisher(settings, channel)
     paused = get_state(s, "paused", str(settings.automation.get("paused", False))).lower() == "true"
-    stats.update(posts_published=0, posts_mock=0, posts_failed=0, posts_deferred=0)
+    stats.update(posts_published=0, posts_mock=0, posts_manual=0, posts_failed=0, posts_deferred=0)
     if paused:
         stats["paused"] = True
         return []
@@ -474,8 +482,9 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
     night = in_window(local, settings.overnight["window_start"], settings.overnight["window_end"])
     drafts = s.scalars(select(Draft).where(Draft.status.in_(("approved", "approved_night"))).order_by(Draft.created_at)).all()
     done: list[Post] = []
+    manual = getattr(publisher, "name", "") == "manual"
     for d in drafts:
-        if d.status == "approved_night" and not night:
+        if d.status == "approved_night" and not night and not manual:
             stats["posts_deferred"] += 1
             continue
         hist = _history(s, settings, now)
@@ -496,6 +505,8 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
         req = PublishRequest(idempotency_key=key, text=d.text, reply_text=d.reply_text,
                              quote_url=media.get("url", "") if media.get("mode") == "quote" else "",
                              media_path=media.get("path", "") if media.get("mode") in ("upload", "render") else "")
+        if getattr(publisher, "name", "") == "manual":
+            publisher.draft_id = d.id
         res = publisher.publish(req)
         post.status, post.remote_id, post.remote_url, post.reply_remote_id, post.error = (
             res.status, res.remote_id, res.remote_url, res.reply_remote_id, res.error)
@@ -508,6 +519,9 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
             post.published_at = now
             d.status, d.story.status = "simulated", "posted"
             stats["posts_mock"] += 1
+        elif res.status == "manual":
+            d.status, d.story.status = "handed_off", "posted"  # operator confirms with the Posted button
+            stats["posts_manual"] += 1
         elif res.status == "uncertain":
             d.status = "uncertain"
             stats["posts_failed"] += 1

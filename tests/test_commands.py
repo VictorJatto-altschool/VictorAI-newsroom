@@ -85,7 +85,8 @@ def test_approve_button_then_publish(fresh_db, now):
     tg.push_button(f"approve:{d.id}", ref)
     with session() as s:
         assert process_updates(s, settings, tg, now) == 1
-        assert s.get(Draft, d.id).status == "approved"
+        # approval publishes immediately; this fake channel has no hand-off buttons, so the mock publisher simulates
+        assert s.get(Draft, d.id).status == "simulated"
     assert tg.marks[-1][1] == "Approved"
     assert get_state_value("telegram_offset") == str(tg._update_id + 1)
 

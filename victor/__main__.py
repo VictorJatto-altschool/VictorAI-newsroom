@@ -22,6 +22,9 @@ def _setup(args) -> tuple:
             pass
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+    # httpx logs full request URLs, which for Telegram contain the bot token. Never at INFO.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     settings = load_settings()
     init_engine(settings.env.database_url)
     return settings

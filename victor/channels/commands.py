@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -102,6 +103,30 @@ def _handle_callback(s: Session, settings: Settings, tg, cq: dict, now: datetime
         event(s, f"draft_{d.status}", "draft", d.id, by="telegram")
         tg.mark(msg_id, "Approved" if action == "approve" else "Approved for night")
         tg.answer_callback(cq["id"], "Approved")
+        from ..pipeline import publish_approved
+
+        st: dict = {}
+        publish_approved(s, settings, st, now, channel=tg)  # manual mode: hands off to the phone right away
+        if st.get("posts_deferred") and not st.get("posts_manual") and not st.get("posts_published"):
+            tg.notify("Approved, but a posting limit is active right now. It will be offered at the next free slot.")
+    elif action == "posted":
+        post = s.scalar(select(Post).where(Post.draft_id == d.id).order_by(Post.id.desc()))
+        if post and post.status == "manual":
+            post.status, post.published_at = "published", now
+            d.status, d.story.status = "published", "posted"
+            event(s, "posted_manually", "post", post.id, by="telegram")
+            tg.mark(msg_id, "Posted")
+            tg.answer_callback(cq["id"], "Recorded. Reply to this message with the post link if you want it saved.")
+        else:
+            tg.answer_callback(cq["id"], "Nothing to confirm")
+    elif action == "skip":
+        post = s.scalar(select(Post).where(Post.draft_id == d.id).order_by(Post.id.desc()))
+        if post and post.status == "manual":
+            post.status = "skipped"
+            d.status, d.story.status = "rejected", "skipped"
+            event(s, "handoff_skipped", "post", post.id, by="telegram")
+            tg.mark(msg_id, "Skipped")
+        tg.answer_callback(cq["id"], "Skipped")
     elif action == "reject":
         d.status, d.decided_at = "rejected", now
         d.story.status = "skipped"
@@ -178,6 +203,24 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
     reply = m.get("reply_to_message")
     if reply and text and not text.startswith("/"):
         ref = str(reply.get("message_id"))
+        if re.match(r"https?://(x|twitter)\.com/\w+/status/\d+", text.strip()):
+            # The operator pasted the published post link under a handoff or draft message.
+            mref = re.search(r"draft #(\d+)", reply.get("text") or "")
+            d = s.get(Draft, int(mref.group(1))) if mref else s.scalar(select(Draft).where(Draft.channel_ref == ref))
+            post = s.scalar(select(Post).where(Post.draft_id == d.id).order_by(Post.id.desc())) if d else None
+            if post is None:  # fall back to the latest hand-off still missing its link
+                post = s.scalar(select(Post).where(Post.status.in_(("manual", "published")), Post.remote_url.is_(None))
+                                .order_by(Post.id.desc()))
+                d = post.draft if post else None
+            if post:
+                post.remote_url = text.strip()
+                if post.status == "manual":
+                    post.status, post.published_at = "published", now
+                    d.status, d.story.status = "published", "posted"
+                tg.notify(f"Saved the link for draft #{d.id}.")
+            else:
+                tg.notify("I could not match that link to a draft.")
+            return
         d = s.scalar(select(Draft).where(Draft.channel_ref == ref).order_by(Draft.id.desc()))
         if d:
             new = new_version(s, settings, d, text, d.why, "Edited by operator", "operator", "", now, tg)
