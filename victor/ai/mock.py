@@ -18,7 +18,7 @@ class MockProvider:
         title = _between(user, "TITLE:", "\n") or "Untitled story"
         publisher = _between(user, "PUBLISHER:", "\n") or "source"
         count = _between(user, "SOURCE_COUNT:", "\n") or "1"
-        post = f"[DEV MODE] NEW: {title[:120]}\n\nReported by {publisher} and {count} other source(s).\n\nWhy it matters: pending real AI provider."
+        post = f"[DEV MODE] NEW: {title[:70]}\n\nReported by {publisher} and {count} other source(s).\n\nWhy it matters: pending real AI provider."
         return json.dumps(
             {
                 "post": post[:280],
