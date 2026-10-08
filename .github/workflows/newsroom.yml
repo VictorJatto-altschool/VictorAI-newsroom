@@ -2,7 +2,7 @@ name: newsroom
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # GitHub may delay scheduled runs by several minutes
+    - cron: "*/15 * * * *"   # GitHub may delay scheduled runs by several minutes; public repo, so minutes are free
   workflow_dispatch:
   push:
     branches: [main]
