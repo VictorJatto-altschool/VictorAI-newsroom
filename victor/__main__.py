@@ -245,13 +245,20 @@ def cmd_telegram(args):
         sys.exit("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are not set")
     tg = TelegramChannel(settings.env.telegram_bot_token, settings.env.telegram_chat_id)
     provider = pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
-    tg.notify("Newsroom console attached. /help for commands.")
-    print("listening for Telegram commands; Ctrl+C to stop")
-    while True:
-        with session() as s:
-            n = process_updates(s, settings, tg, provider=provider)
+    if not args.quiet:
+        tg.notify("Newsroom console attached. /help for commands.")
+    deadline = time.time() + args.max_minutes * 60 if args.max_minutes else None
+    print(f"listening for Telegram commands{f' for {args.max_minutes} min' if deadline else ''}; Ctrl+C to stop", flush=True)
+    while deadline is None or time.time() < deadline:
+        try:
+            with session() as s:
+                n = process_updates(s, settings, tg, provider=provider)
+        except Exception as e:  # noqa: BLE001  keep polling through transient DB/network errors
+            print(f"poll error: {type(e).__name__}: {e}", flush=True)
+            time.sleep(5)
+            continue
         if n:
-            print(f"handled {n} update(s)")
+            print(f"handled {n} update(s)", flush=True)
         time.sleep(2)
 
 
@@ -325,7 +332,10 @@ def main(argv=None):
     rd.add_argument("draft_id", type=int)
     rd.add_argument("--image-only", action="store_true")
     rd.set_defaults(fn=cmd_render)
-    sub.add_parser("telegram", help="long-poll Telegram for buttons and commands").set_defaults(fn=cmd_telegram)
+    tgp = sub.add_parser("telegram", help="long-poll Telegram for buttons and commands")
+    tgp.add_argument("--max-minutes", type=int, default=0, help="exit after this long (0 = run until stopped)")
+    tgp.add_argument("--quiet", action="store_true", help="do not announce the console on start")
+    tgp.set_defaults(fn=cmd_telegram)
     sub.add_parser("test-ai", help="draft one sample post with the configured provider").set_defaults(fn=cmd_test_ai)
     sub.add_parser("test-x", help="check X credentials").set_defaults(fn=cmd_test_x)
     args = p.parse_args(argv)

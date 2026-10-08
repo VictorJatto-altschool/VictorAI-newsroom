@@ -1,0 +1,42 @@
+name: telegram
+
+# Always-on button handling in the cloud. A job may run for up to 6 hours, so one starts every 5 hours,
+# polls Telegram for 5h50m, and the next one replaces it. Approvals, rewrites and /commands answer in seconds.
+
+on:
+  schedule:
+    - cron: "5 */5 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: telegram-poller
+  cancel-in-progress: true
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      APP_ENV: ${{ secrets.APP_ENV }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      TZ_NAME: Africa/Lagos
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      AI_BASE_URL: ${{ secrets.AI_BASE_URL || 'https://models.github.ai/inference' }}
+      AI_API_KEY: ${{ secrets.AI_API_KEY || secrets.GITHUB_TOKEN }}
+      AI_MODEL: ${{ secrets.AI_MODEL || 'openai/gpt-4o-mini' }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    permissions:
+      models: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: sudo apt-get install -y -qq ffmpeg fonts-dejavu-core >/dev/null
+      - run: pip install ".[postgres]"
+      - run: python -m victor telegram --max-minutes 350 --quiet
