@@ -71,12 +71,15 @@ def host_of(url: str) -> str:
         return ""
 
 
-_PUB_NOISE = {"news", "blog", "blogs", "updates", "ai", "the", "official", "newsroom", "feed", "com", "inc"}
+_PUB_NOISE = {"news", "blog", "blogs", "updates", "ai", "the", "official", "newsroom", "feed", "com", "inc", "gov", "org"}
 
 
 def normalize_publisher(name: str) -> str:
-    """'OpenAI News', 'OpenAI' and 'openai.com' must count as one publisher."""
-    words = re.sub(r"[^a-z0-9 ]+", " ", (name or "").lower()).split()
+    """'OpenAI News', 'OpenAI', 'openai.com', 'NASA (.gov)' and 'AI News | TechCrunch' collapse to one publisher each."""
+    name = re.sub(r"\([^)]*\)", " ", name or "")
+    if "|" in name:
+        name = name.split("|")[-1]
+    words = re.sub(r"[^a-z0-9 ]+", " ", name.lower()).split()
     core = [w for w in words if w not in _PUB_NOISE]
     return " ".join(core) or " ".join(words)
 
