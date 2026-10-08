@@ -135,6 +135,17 @@ class Note(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class GrowthSnapshot(Base):
+    """Manual or synced account numbers. Free X tier cannot read these, so they are typed in."""
+
+    __tablename__ = "growth_snapshots"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    followers: Mapped[int] = mapped_column(Integer)
+    verified_impressions_90d: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(String(20), default="manual")
+
+
 class Run(Base):
     __tablename__ = "runs"
     id: Mapped[int] = mapped_column(primary_key=True)

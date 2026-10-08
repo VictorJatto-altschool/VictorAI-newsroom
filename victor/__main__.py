@@ -144,6 +144,59 @@ def cmd_events(args):
             print(f"{e.at.replace(tzinfo=timezone.utc):%Y-%m-%d %H:%M} {e.kind:<16} {e.ref_type or '':<6} {e.ref_id or '':<5} {e.detail}")
 
 
+def cmd_telegram(args):
+    """Long-poll Telegram locally so buttons and commands work while you test (Ctrl+C to stop)."""
+    import time
+
+    from .ai.draft import pick_provider
+    from .channels.commands import process_updates
+    from .channels.telegram import TelegramChannel
+
+    settings = _setup(args)
+    if not settings.env.has_telegram:
+        sys.exit("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are not set")
+    tg = TelegramChannel(settings.env.telegram_bot_token, settings.env.telegram_chat_id)
+    provider = pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
+    tg.notify("Newsroom console attached. /help for commands.")
+    print("listening for Telegram commands; Ctrl+C to stop")
+    while True:
+        with session() as s:
+            n = process_updates(s, settings, tg, provider=provider)
+        if n:
+            print(f"handled {n} update(s)")
+        time.sleep(2)
+
+
+def cmd_test_ai(args):
+    from .ai.draft import SourceView, generate, pick_provider
+
+    settings = _setup(args)
+    provider = pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
+    print(f"provider: {provider.name} ({provider.model})")
+    src = [SourceView(0, "NASA", 1, "NASA's Crew-12 returns to Earth after 237 days in orbit",
+                      "Crew-12 splashed down in the Pacific Ocean after a 237-day mission aboard the International Space Station.",
+                      "https://www.nasa.gov/")]
+    out = generate(provider, settings.voice, src[0].title, "space", src)
+    print(out.text, "\n--\nwhy:", out.why, "\nreason:", out.reason)
+
+
+def cmd_test_x(args):
+    settings = _setup(args)
+    if not settings.env.has_x:
+        sys.exit("X_API_KEY / X_API_SECRET / X_ACCESS_TOKEN / X_ACCESS_SECRET are not all set")
+    import tweepy
+
+    e = settings.env
+    client = tweepy.Client(consumer_key=e.x_api_key, consumer_secret=e.x_api_secret,
+                           access_token=e.x_access_token, access_token_secret=e.x_access_secret)
+    try:
+        me = client.get_me()
+        print(f"authenticated as @{me.data.username} (id {me.data.id})")
+        print("publishing.enabled in settings.yaml:", settings.raw.get("publishing", {}).get("enabled", False))
+    except tweepy.errors.TweepyException as err:
+        sys.exit(f"X API rejected the credentials or the tier does not allow this call: {err}")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="victor", description="Victor AI & Tech newsroom")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -168,6 +221,9 @@ def main(argv=None):
     n = sub.add_parser("note")
     n.add_argument("text")
     n.set_defaults(fn=cmd_note)
+    sub.add_parser("telegram", help="long-poll Telegram for buttons and commands").set_defaults(fn=cmd_telegram)
+    sub.add_parser("test-ai", help="draft one sample post with the configured provider").set_defaults(fn=cmd_test_ai)
+    sub.add_parser("test-x", help="check X credentials").set_defaults(fn=cmd_test_x)
     args = p.parse_args(argv)
     args.fn(args)
 

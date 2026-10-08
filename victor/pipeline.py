@@ -209,6 +209,9 @@ def rescore(s: Session, settings: Settings, stats: dict[str, Any], now: datetime
             max_tier=min(i.source.tier for i in items),
         )
         st.score, st.score_breakdown, st.classification = score_story(facts, settings.scoring, now)
+        if any(i.source.boost_until and _aware(i.source.boost_until) > now for i in items):
+            st.score = min(st.score + 10, 100.0)
+            st.score_breakdown["boost"] = 10
     stats["stories_scored"] = len(active)
 
 
@@ -238,8 +241,10 @@ def _channel(settings: Settings):
 
 def _publisher(settings: Settings):
     env = settings.env
-    if env.has_x:
-        return XPublisher(env.x_api_key, env.x_api_secret, env.x_access_token, env.x_access_secret)
+    pub_cfg = settings.raw.get("publishing", {})
+    if env.has_x and pub_cfg.get("enabled", False):
+        return XPublisher(env.x_api_key, env.x_api_secret, env.x_access_token, env.x_access_secret,
+                          username=pub_cfg.get("x_username", ""))
     return MockPublisher()
 
 
@@ -255,6 +260,7 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
     hist = _history(s, settings, now)
     paused = get_state(s, "paused", str(settings.automation.get("paused", False))).lower() == "true"
     mode = get_state(s, "mode", settings.automation.get("mode", "approval"))
+    night_cap = int(get_state(s, "night_cap", str(settings.overnight["night_cap"])))
     eligible = s.scalars(
         select(Story).where(Story.status == "discovered", Story.classification.in_(("breaking", "hot", "trending")),
                             Story.last_updated_at >= now - ACTIVE_WINDOW).order_by(Story.score.desc())
@@ -285,7 +291,7 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
         dec = decide(now_utc=now, settings=settings.raw, story_category=st.category,
                      story_text=f"{st.title} {out.text}", story_entities=st.entities, story_id=st.id,
                      tier1_count=st.tier1_count, other_count=other, checks_passed=checks["passed"],
-                     hist=hist, paused=paused, mode=mode)
+                     hist=hist, paused=paused, mode=mode, night_cap=night_cap)
         route = dec.route if dec.allowed else "blocked"
         draft = Draft(
             story=st, text=out.text, reply_text=f"Source: {views[0].url}" if views else "", why=out.why,
@@ -372,19 +378,28 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
 
 
 def run_once(settings: Settings, now: datetime | None = None, **overrides: Any) -> dict[str, Any]:
+    from .channels.commands import process_updates
+
     now = now or utcnow()
     stats: dict[str, Any] = {"dev_mode": settings.env.dev_mode}
+    channel = overrides.get("channel") or _channel(settings)
+    provider = overrides.get("provider") or pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
+    publisher = overrides.get("publisher") or _publisher(settings)
+    check_links = overrides.get("check_links", True)
     with session() as s:
         run = Run(started_at=now)
         s.add(run)
         s.flush()
         try:
+            if hasattr(channel, "get_updates"):
+                stats["commands_handled"] = process_updates(s, settings, channel, now, provider)
             new_items = collect(s, settings, stats, now, fetcher=overrides.get("fetcher", fetch_source))
             cluster_items(s, new_items, stats, now)
             rescore(s, settings, stats, now)
-            draft_stories(s, settings, stats, now, provider=overrides.get("provider"), channel=overrides.get("channel"),
-                          check_links=overrides.get("check_links", True))
-            publish_approved(s, settings, stats, now, publisher=overrides.get("publisher"), channel=overrides.get("channel"))
+            draft_stories(s, settings, stats, now, provider=provider, channel=channel, check_links=check_links)
+            publish_approved(s, settings, stats, now, publisher=publisher, channel=channel)
+            if hasattr(channel, "get_updates"):  # pick up anything that arrived during the cycle
+                stats["commands_handled"] += process_updates(s, settings, channel, now, provider)
             run.ok = True
         except Exception as e:  # noqa: BLE001
             run.error = f"{type(e).__name__}: {e}"[:1000]

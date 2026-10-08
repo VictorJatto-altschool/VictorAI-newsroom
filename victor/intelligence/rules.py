@@ -81,6 +81,7 @@ def decide(
     hist: PostingHistory,
     paused: bool,
     mode: str,
+    night_cap: int | None = None,
 ) -> Decision:
     """Route a passing draft. 'autonomous' only when every overnight condition holds."""
     reasons: list[str] = []
@@ -108,7 +109,8 @@ def decide(
     local = now_utc.astimezone(tz)
     if not in_window(local, ov["window_start"], ov["window_end"]):
         return Decision(True, "review", ["outside_window"])
-    if hist.autonomous_in_window >= int(ov["night_cap"]):
+    cap = int(ov["night_cap"]) if night_cap is None else int(night_cap)
+    if hist.autonomous_in_window >= cap:
         return Decision(True, "review", ["night_cap_reached"])
     if tier1_count < int(ov["min_tier1_sources"]):
         return Decision(True, "review", ["needs_tier1"])

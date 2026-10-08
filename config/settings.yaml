@@ -63,3 +63,19 @@ filter:
 drafting:
   max_chars: 280
   provider_order: [gemini, groq, mock]
+
+publishing:
+  enabled: false               # flip to true only after X API terms are confirmed and `victor test-x` passes
+  x_username: SI4blog_
+
+growth:                        # X program targets; keep in sync with X's current official rules
+  follower_target: 500
+  impressions_target_90d: 500000
+
+educational:
+  enabled: true
+  max_per_day: 1               # educational posts drafted from operator notes only
+
+digest:
+  weekday: 0                   # Monday
+  hour: 8                      # local time
