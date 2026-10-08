@@ -14,7 +14,7 @@ def test_filter_drops_old_short_sponsored_and_non_english(settings, now):
     cfg = settings.filter
     assert filter_reason(_raw("A perfectly fine headline about AI", now - timedelta(hours=1)), cfg, now) is None
     assert filter_reason(_raw("A perfectly fine headline about AI", now - timedelta(days=3)), cfg, now) == "too_old"
-    assert filter_reason(_raw("short", now), cfg, now) == "title_too_short"
+    assert filter_reason(_raw("short one", now), cfg, now) == "title_too_short"
     assert filter_reason(_raw("Sponsored: the best AI laptops of 2026", now), cfg, now).startswith("drop_keyword")
     assert filter_reason(_raw("人工智能模型发布新版本并且非常强大，开发者反应热烈，市场关注度上升", now), cfg, now) == "language"
 

@@ -15,7 +15,7 @@ def test_normalize_publisher_merges_variants():
     assert normalize_publisher("OpenAI News") == normalize_publisher("OpenAI") == normalize_publisher("openai.com")
     assert normalize_publisher("The Verge AI") == normalize_publisher("The Verge")
     assert normalize_publisher("NASA News") != normalize_publisher("Space.com")
-    assert normalize_publisher("NASA (.gov)") == normalize_publisher("NASA")
+    assert normalize_publisher("NASA (.gov)") == normalize_publisher("NASA") == normalize_publisher("NASA YouTube")
     assert normalize_publisher("AI News & Artificial Intelligence | TechCrunch") == normalize_publisher("TechCrunch AI")
 
 

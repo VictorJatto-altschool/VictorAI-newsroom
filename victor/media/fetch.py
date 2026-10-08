@@ -106,6 +106,11 @@ def prepare_media(draft_media: dict, headline: str, post_text: str, category: st
     media = dict(draft_media or {})
     mode = media.get("mode", "render")
     try:
+        if mode == "render" and category == "space" and not media.get("url"):
+            hit = nasa_image_search(headline)  # public domain, no key
+            if hit:
+                media.update(mode="upload", url=hit["url"], rights="public_domain", provider="nasa", title=hit.get("title", ""))
+                mode = "upload"
         if mode == "upload" and media.get("url"):
             p = download_public_domain(media["url"], headline)
             if p:

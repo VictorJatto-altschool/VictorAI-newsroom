@@ -13,6 +13,19 @@ sources:
   - {name: NASA News,              kind: rss, x_handle: NASA,           url: https://www.nasa.gov/news-release/feed/,         tier: 1, category: space}
   - {name: GitHub Blog,            kind: rss, x_handle: github,         url: https://github.blog/feed/,                       tier: 1, category: ai_tools}
   - {name: arXiv cs.AI,            kind: rss,                           url: https://rss.arxiv.org/rss/cs.AI,                 tier: 1, category: research, interval_minutes: 180}
+  # --- Tier 1: official YouTube channels (free RSS, no API key). Videos become reference links in the reply. ---
+  - {name: OpenAI YouTube,         kind: youtube, x_handle: OpenAI,         url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCXZCJLdBC09xxGZ6gcdrc6A", tier: 1, category: ai_models, interval_minutes: 60}
+  - {name: Anthropic YouTube,      kind: youtube, x_handle: AnthropicAI,    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCrDwWp7EBBv4NwvScIpBDOA", tier: 1, category: ai_models, interval_minutes: 60}
+  - {name: Google DeepMind YouTube, kind: youtube, x_handle: GoogleDeepMind, url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCP7jMXSY2xbc3KCAE0MHQ-A", tier: 1, category: ai_models, interval_minutes: 60}
+  - {name: Google YouTube,         kind: youtube, x_handle: Google,         url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCK8sQmJBp8GCxrOtXWBpyEA", tier: 1, category: tech, interval_minutes: 60}
+  - {name: NVIDIA YouTube,         kind: youtube, x_handle: nvidia,         url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCHuiy8bXnmK5nisYHUd1J5g", tier: 1, category: tech, interval_minutes: 60}
+  - {name: Microsoft YouTube,      kind: youtube, x_handle: Microsoft,      url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCFtEEv80fQVKkD4h1PF-Xqw", tier: 1, category: ai_tools, interval_minutes: 60}
+  - {name: Meta YouTube,           kind: youtube, x_handle: Meta,           url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC04FyDIvYXNecpbG8gyOw4A", tier: 1, category: tech, interval_minutes: 60}
+  - {name: Hugging Face YouTube,   kind: youtube, x_handle: huggingface,    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCHlNU7kIZhRgSbhHvFoy72w", tier: 1, category: ai_tools, interval_minutes: 60}
+  - {name: GitHub YouTube,         kind: youtube, x_handle: github,         url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC7c3Kb6jYCRj4JOHHZTxKsQ", tier: 1, category: ai_tools, interval_minutes: 60}
+  - {name: NASA YouTube,           kind: youtube, x_handle: NASA,           url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCLA_DiR1FfKNvjuUpBHmylQ", tier: 1, category: space, interval_minutes: 60}
+  - {name: SpaceX YouTube,         kind: youtube, x_handle: SpaceX,         url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCtI0Hodo5o5dUb67FeUjDeA", tier: 1, category: space, interval_minutes: 60}
+  - {name: The Verge YouTube,      kind: youtube,                           url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCddiUEpeqJcYeBxX1IVBKvQ", tier: 3, category: tech, interval_minutes: 120}
   # --- Tier 2/3: press ---
   - {name: TechCrunch AI,          kind: rss, url: https://techcrunch.com/category/artificial-intelligence/feed/,       tier: 3, category: ai_models}
   - {name: The Verge AI,           kind: rss, url: https://www.theverge.com/rss/ai-artificial-intelligence/index.xml,  tier: 3, category: ai_models}

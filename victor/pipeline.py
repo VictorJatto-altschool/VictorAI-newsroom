@@ -125,7 +125,7 @@ def collect(s: Session, settings: Settings, stats: dict[str, Any], now: datetime
                     canonical_url=raw.canonical_url, original_url=raw.original_url, title=raw.title,
                     summary=raw.summary, publisher=raw.publisher or row.name, author=raw.author,
                     published_at=raw.published_at or now, discovered_at=now, entities=raw.entities,
-                    media=find_media(raw.raw_html, raw.summary, host_of(raw.original_url)),
+                    media=find_media(f"{raw.raw_html} {raw.original_url}", raw.summary, host_of(raw.original_url)),
                     filtered_reason=reason,
                 )
                 s.add(item)
@@ -254,6 +254,17 @@ def _official_handles(settings: Settings) -> set[str]:
     return {c.x_handle.lstrip("@").lower() for c in settings.sources if c.x_handle}
 
 
+def _reply_text(views: list[SourceView], media_refs: list[dict]) -> str:
+    """First reply: the article source, plus the official video link when one exists (links stay out of the post)."""
+    if not views:
+        return ""
+    lines = [f"Source: {views[0].url}"]
+    yt = next((m for m in media_refs if m.get("type") == "youtube"), None)
+    if yt and yt["url"] != views[0].url:
+        lines.append(f"Video: {yt['url']}")
+    return "\n".join(lines)
+
+
 def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: datetime | None = None,
                   provider=None, channel=None, check_links: bool = True) -> list[Draft]:
     now = now or utcnow()
@@ -296,7 +307,7 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
                      hist=hist, paused=paused, mode=mode, night_cap=night_cap)
         route = dec.route if dec.allowed else "blocked"
         draft = Draft(
-            story=st, text=out.text, reply_text=f"Source: {views[0].url}" if views else "", why=out.why,
+            story=st, text=out.text, reply_text=_reply_text(views, media_refs), why=out.why,
             reason=out.reason, provider=out.provider, model=out.model, source_item_ids=[v.item_id for v in views],
             media=media, checks=checks, checks_passed=checks["passed"], route=route, dev_mode=settings.env.dev_mode,
             status="approved" if route == "autonomous" else ("blocked" if route == "blocked" else "pending"),
@@ -348,7 +359,7 @@ def draft_one(s: Session, settings: Settings, story: Story, now: datetime, provi
                  other_count=max(story.source_count - (1 if story.tier1_count else 0), 0), checks_passed=checks["passed"],
                  hist=hist, paused=paused, mode=mode)
     route = "review" if dec.allowed else "blocked"  # operator-submitted stories are never autonomous
-    draft = Draft(story=story, text=out.text, reply_text=f"Source: {views[0].url}", why=out.why, reason=out.reason,
+    draft = Draft(story=story, text=out.text, reply_text=_reply_text(views, media_refs), why=out.why, reason=out.reason,
                   provider=out.provider, model=out.model, source_item_ids=[v.item_id for v in views], media=media,
                   checks=checks, checks_passed=checks["passed"], route=route, dev_mode=settings.env.dev_mode,
                   status="blocked" if route == "blocked" else "pending")

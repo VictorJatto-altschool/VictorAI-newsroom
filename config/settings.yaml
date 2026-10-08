@@ -58,7 +58,7 @@ filter:
   languages: [en]
   drop_keywords: [sponsored, advertorial, giveaway, coupon, "promo code", horoscope]
   require_any_keywords: []     # empty = rely on source category
-  min_title_chars: 20
+  min_title_chars: 12          # video titles are short ("Introducing GPT-6")
 
 drafting:
   max_chars: 280

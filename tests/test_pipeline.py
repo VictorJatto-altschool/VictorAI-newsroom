@@ -24,6 +24,7 @@ def _item(url, title, publisher, published, summary=""):
 def make_fetcher(now):
     story_a = [
         ("OpenAI News", "https://openai.com/index/gpt-6", "Introducing GPT-6: a 2M token context window", now - timedelta(minutes=50)),
+        ("OpenAI YouTube", "https://www.youtube.com/watch?v=GPT6launch01", "Introducing GPT-6", now - timedelta(minutes=48)),
         ("TechCrunch AI", "https://techcrunch.com/gpt6?utm_source=rss", "OpenAI launches GPT-6 with 2M token context", now - timedelta(minutes=40)),
         ("The Verge AI", "https://theverge.com/gpt6", "OpenAI's GPT-6 arrives with a 2M context window", now - timedelta(minutes=30)),
         ("Google News AI labs", "https://news.google.com/rss/articles/abc", "Introducing GPT-6: a 2M token context window", now - timedelta(minutes=45)),
@@ -35,6 +36,9 @@ def make_fetcher(now):
         if cfg.name == "Wired AI":
             return FetchResult(ok=False, items=[], error="boom")  # one failing source must not stop the run
         items = [_item(u, t, p if "Google" not in p else "OpenAI", when) for p, u, t, when in rows]
+        for it in items:  # mirror collect(): the item's own URL is part of the media scan
+            if "youtube.com" in it.original_url:
+                it.raw_html += f" {it.original_url}"
         return FetchResult(ok=True, items=items)
 
     return fetcher
@@ -43,13 +47,13 @@ def make_fetcher(now):
 def test_full_cycle_clusters_scores_drafts_and_mock_publishes(fresh_db, settings, now, capsys):
     stats = run_once(settings, now, fetcher=make_fetcher(now), provider=MockProvider(), channel=ConsoleChannel(),
                      publisher=MockPublisher(), check_links=False)
-    assert stats["sources_failed"] == 1 and stats["items_new"] == 5
+    assert stats["sources_failed"] == 1 and stats["items_new"] == 6
     with session() as s:
         stories = s.scalars(select(Story).order_by(Story.score.desc())).all()
         top = stories[0]
         assert "GPT-6" in top.title
-        assert top.source_count == 3, "Google News copy of the OpenAI article must not count as a 4th publisher"
-        assert top.tier1_count == 1
+        assert top.source_count == 3, "Google News copy and OpenAI's own YouTube upload are the same publisher"
+        assert top.tier1_count == 2
         assert top.classification in ("hot", "breaking"), top.score_breakdown
         drafts = s.scalars(select(Draft)).all()
         assert len(drafts) == 1 and drafts[0].story_id == top.id
@@ -57,6 +61,7 @@ def test_full_cycle_clusters_scores_drafts_and_mock_publishes(fresh_db, settings
         assert d.route == "review" and d.status == "pending" and d.checks_passed and d.dev_mode
         assert d.media["mode"] == "quote" and "OpenAI" in d.media["url"]
         assert d.source_item_ids and d.reply_text.startswith("Source: https://openai.com")
+        assert "Video: https://www.youtube.com/watch?v=GPT6launch01" in d.reply_text
         assert "[DEV MODE]" in capsys.readouterr().out
         d.status = "approved"
     stats2 = {}

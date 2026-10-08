@@ -51,7 +51,7 @@ Once `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set, every draft arrives as
 ## Configure it
 
 - `config/settings.yaml` — automation mode, overnight rule, posting limits, scoring, content mix, filter, publishing switch, growth targets, educational cap, digest time, dashboard options. All enforced in code.
-- `config/sources.yaml` — watch list with tier, category, interval and official X handle (only those handles are quote-posted automatically).
+- `config/sources.yaml` — watch list: official blogs, 12 official YouTube channels, press, Google News queries, Hacker News, Hugging Face trending, Reddit. Each has a tier, category, interval and official X handle (only those handles are quote-posted automatically).
 - `config/voice.md` — the voice guide and example posts the model reads before every draft.
 - `.env` (copy from `.env.example`) — keys. Each missing key switches that adapter to its mock.
 
@@ -70,7 +70,7 @@ Once `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set, every draft arrives as
 3. Items about the same event are clustered into one story. Google News copies of an official post count as the same publisher.
 4. Stories are scored from counts only. One source never reaches "trending" unless it is an official announcement under 3 hours old.
 5. The top 3 stories per run are drafted from their own source texts, then checked: length, no URLs or hashtags, every number appears in a source, no hype words, source link resolves.
-6. Media by rights: quote an official X post found in the sources; else attach a public-domain image; else render an original 1080×1080 card and an 8-second clip with ffmpeg.
+6. Media by rights: quote an official X post found in the sources; else attach a public-domain image (NASA's library is searched automatically for space stories); else render an original 1080×1080 card and an 8-second clip with ffmpeg. Official YouTube channels are watched through their free RSS feeds; when a story has an official video, its link goes in the first reply under the source link, because external links in the post itself reduce reach on X.
 7. The overnight rule decides the route. Autonomous only in `restricted_autonomous` mode, inside the window, with an official source plus two others, an allowed category, no sensitive keyword, under the night cap and the posting limits. Everything else waits for you.
 8. Approved drafts publish at the next slot that respects the limits. One idempotency key per draft version, so a retry can never double-post. A timeout after submit is `uncertain`, reconciled against your timeline when the API tier allows, never resubmitted blindly.
 9. Educational posts come only from your `/note` entries, at most one per day, always reviewed by you.

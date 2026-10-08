@@ -71,7 +71,8 @@ def host_of(url: str) -> str:
         return ""
 
 
-_PUB_NOISE = {"news", "blog", "blogs", "updates", "ai", "the", "official", "newsroom", "feed", "com", "inc", "gov", "org"}
+_PUB_NOISE = {"news", "blog", "blogs", "updates", "ai", "the", "official", "newsroom", "feed", "com", "inc", "gov", "org",
+              "youtube", "channel", "x", "twitter"}  # an org's blog, channel and X account are one publisher
 
 
 def normalize_publisher(name: str) -> str:
