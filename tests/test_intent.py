@@ -55,7 +55,9 @@ def test_approve_hands_off_to_phone_and_posted_confirms(fresh_db, now):
     assert "READY TO POST" in text and buttons[0][0]["text"] == "Open in X"
     assert buttons[0][0]["url"].startswith("https://x.com/intent/post?")
     assert "url=https%3A%2F%2Fx.com%2FOpenAI" in buttons[0][0]["url"]  # the official post is quoted
-    assert "Source: https://openai.com" in text
+    # manual mode puts the video link (else the source link) inside the post text itself
+    assert "youtube.com%2Fwatch%3Fv%3DGPT6launch0" in buttons[0][0]["url"]
+    assert "https://www.youtube.com/watch?v=GPT6launch0" in text
     handoff_ref = tg._next_id
     tg.push_button(f"posted:{did}", handoff_ref)
     with session() as s:

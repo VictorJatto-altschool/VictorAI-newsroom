@@ -543,6 +543,16 @@ def _api_reply_text(d: Draft, mode: str) -> str:
     return f"Source: {primary.publisher or primary.source.name}{tail}."
 
 
+def _post_link(reply_text: str) -> str:
+    """From 'Source: <url>\\nVideo: <url>' pick the video link first, else the source link."""
+    found = {}
+    for line in (reply_text or "").splitlines():
+        k, _, v = line.partition(":")
+        if v.strip().startswith("http"):
+            found[k.strip().lower()] = v.strip()
+    return found.get("video") or found.get("source") or ""
+
+
 def _estimate_cost(d: Draft, pub_cfg: dict) -> float:
     per_post = float(pub_cfg.get("cost_post_usd", 0.015))
     per_url = float(pub_cfg.get("cost_post_with_url_usd", 0.200))
@@ -620,11 +630,18 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
                                   want_clip=bool(pub_cfg.get("render_clip", True)))
             d.media = media
         reply = d.reply_text
+        text = d.text
         if api:
             reply = _api_reply_text(d, pub_cfg.get("api_reply", "plain"))
             post.cost_usd = est
             spent_today += est
-        req = PublishRequest(idempotency_key=key, text=d.text, reply_text=reply,
+        elif manual and pub_cfg.get("link_in_post", True):
+            # Posting by hand costs nothing per link, so the video link (else the source link) goes in the post itself.
+            link = _post_link(d.reply_text)
+            if link:
+                text = f"{d.text.rstrip()}\n\n{link}"
+                reply = ""
+        req = PublishRequest(idempotency_key=key, text=text, reply_text=reply,
                              quote_url=media.get("url", "") if media.get("mode") == "quote" else "",
                              media_path=media.get("path", "") if media.get("mode") in ("upload", "render") else "")
         if manual:

@@ -22,6 +22,13 @@ and earn a reply by its last.
    that an informed reader would actually answer: "Would you trust a 2M-token summary of your own codebase?"
    Never "Thoughts?", never "Agree?", never "RT if…", never bait.
 
+## Leaders and founders
+When the story is about what a founder, CEO or political leader did or said (Musk, Altman, Huang,
+Zuckerberg, Nadella, Pichai, Amodei, Hassabis, Cook, Bezos, Trump on tech), lead with the person and the
+concrete action or quote, name the company it affects, and say what changes for users or the industry.
+Report what they said as a quote attributed to the outlet that reported it. Never editorialise about
+the person; the facts carry it.
+
 ## Rules that never bend
 
 - The account is X Premium, so the limit is 600 characters, but X folds everything after about 280

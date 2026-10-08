@@ -39,6 +39,17 @@ sources:
   - {name: Google News AI tools,   kind: gnews, query: "AI tool launch",                                              tier: 4, category: ai_tools}
   - {name: Google News AI labs,    kind: gnews, query: "OpenAI OR Anthropic OR DeepMind OR xAI OR Mistral",           tier: 4, category: ai_models}
   - {name: Google News SpaceX,     kind: gnews, query: "SpaceX OR Starship OR NASA launch",                           tier: 4, category: space}
+  # --- Leaders and founders worldwide (tier 4 via Google News: many outlets per story, so corroboration comes for free) ---
+  - {name: Leaders Elon Musk,        kind: gnews, query: "\"Elon Musk\" (Tesla OR SpaceX OR xAI OR Starlink OR Neuralink OR Grok)",   tier: 4, category: leaders}
+  - {name: Leaders Sam Altman,       kind: gnews, query: "\"Sam Altman\" OR \"OpenAI CEO\"",                                      tier: 4, category: leaders}
+  - {name: Leaders Jensen Huang,     kind: gnews, query: "\"Jensen Huang\" OR \"NVIDIA CEO\"",                                    tier: 4, category: leaders}
+  - {name: Leaders Zuckerberg,       kind: gnews, query: "\"Mark Zuckerberg\" OR \"Meta CEO\"",                                   tier: 4, category: leaders}
+  - {name: Leaders Nadella Pichai,   kind: gnews, query: "\"Satya Nadella\" OR \"Sundar Pichai\"",                                tier: 4, category: leaders}
+  - {name: Leaders Amodei Hassabis,  kind: gnews, query: "\"Dario Amodei\" OR \"Demis Hassabis\" OR \"Anthropic CEO\"",           tier: 4, category: leaders}
+  - {name: Leaders Cook Bezos,       kind: gnews, query: "\"Tim Cook\" OR \"Jeff Bezos\" (Apple OR Amazon OR \"Blue Origin\")",   tier: 4, category: leaders}
+  - {name: Leaders Trump tech,       kind: gnews, query: "Trump (AI OR SpaceX OR NASA OR semiconductor OR TikTok OR \"Elon Musk\")",  tier: 4, category: leaders}
+  - {name: Leaders AI founders,      kind: gnews, query: "(Mistral OR Perplexity OR \"Scale AI\" OR Cursor OR Databricks) CEO OR founder", tier: 4, category: leaders}
+  - {name: Google News Big Tech,     kind: gnews, query: "(Apple OR Google OR Microsoft OR Amazon OR Meta OR Tesla OR NVIDIA) announces",  tier: 4, category: business}
   - {name: Hacker News Front,      kind: hn,    url: "https://hnrss.org/frontpage?points=100",                        tier: 4, category: tech}
   - {name: Hugging Face Trending,  kind: hf,    url: "https://huggingface.co/api/models?sort=trendingScore&direction=-1&limit=20", tier: 4, category: ai_models, interval_minutes: 120}
   - {name: Reddit r/artificial,    kind: reddit, url: "https://www.reddit.com/r/artificial/top/.rss?t=day",           tier: 4, category: ai_models, interval_minutes: 120}

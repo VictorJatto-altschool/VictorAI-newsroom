@@ -45,7 +45,8 @@ scoring:
     science: 0.5
     cybersecurity: 0.6
     tech: 0.6
-    business: 0.5
+    leaders: 0.9                 # what founders and CEOs did or said today
+    business: 0.6
     other: 0.3
 
 content_mix:                   # advisory shares, used for tie-breaking only
@@ -76,6 +77,7 @@ publishing:
   enabled: true
   x_username: SI4blog_
   # X API pay-per-use (docs.x.com, Oct 2026): post $0.015, post containing a URL $0.200, quote via id $0.015.
+  link_in_post: true           # intent (manual) mode: put the video link, or else the source link, inside the post itself
   api_reply: plain             # plain = "Source: <publisher>" with no URL ($0.015) | link = full URL ($0.200) | none
   daily_budget_usd: 0.25       # API mode refuses to post once today's estimated spend reaches this
   cost_post_usd: 0.015
