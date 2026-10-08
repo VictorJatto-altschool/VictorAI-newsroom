@@ -36,11 +36,21 @@ class SourceView:
 
 
 def pick_provider(env: Env, order: list[str]) -> AIProvider:
+    """First configured provider in `order` wins. 'compat' means whatever AI_BASE_URL/AI_API_KEY/AI_MODEL point at."""
+    from .compat import PRESETS, OpenAICompatProvider
+
     for name in order:
         if name == "gemini" and env.gemini_api_key:
             return GeminiProvider(env.gemini_api_key)
         if name == "groq" and env.groq_api_key:
             return GroqProvider(env.groq_api_key)
+        if name == "compat" and env.ai_base_url:
+            preset = next((k for k, (url, _) in PRESETS.items() if url.rstrip("/") == env.ai_base_url.rstrip("/")), "compat")
+            model = env.ai_model or (PRESETS[preset][1] if preset in PRESETS else "")
+            if model:
+                return OpenAICompatProvider(preset, env.ai_base_url, env.ai_api_key, model)
+        if name in PRESETS and name not in ("groq",) and env.ai_base_url == "" and getattr(env, f"{name}_api_key", ""):
+            return OpenAICompatProvider(name, PRESETS[name][0], getattr(env, f"{name}_api_key"), env.ai_model or PRESETS[name][1])
         if name == "mock":
             return MockProvider()
     return MockProvider()

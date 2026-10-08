@@ -62,7 +62,7 @@ filter:
 
 drafting:
   max_chars: 280
-  provider_order: [gemini, groq, mock]
+  provider_order: [gemini, compat, groq, mock]   # compat = AI_BASE_URL in .env (GitHub Models, OpenRouter, Mistral, Cerebras, Ollama)
 
 publishing:
   enabled: false               # flip to true only after X API terms are confirmed and `victor test-x` passes
