@@ -94,5 +94,5 @@ class OpenAICompatProvider:
             raise ProviderError(f"{self.name} http {r.status_code}: {r.text[:200]}")
         try:
             return r.json()["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as e:
-            raise ProviderError(f"{self.name} unexpected response shape: {e}") from e
+        except (KeyError, IndexError, TypeError, ValueError) as e:  # ValueError covers a non-JSON 200 body
+            raise ProviderError(f"{self.name} unexpected response: {type(e).__name__}: {r.text[:120]!r}") from e

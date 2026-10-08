@@ -31,5 +31,5 @@ class GeminiProvider:
             raise ProviderError(f"gemini http {r.status_code}: {r.text[:200]}")
         try:
             return r.json()["candidates"][0]["content"]["parts"][0]["text"]
-        except (KeyError, IndexError, TypeError) as e:
-            raise ProviderError(f"gemini unexpected response shape: {e}") from e
+        except (KeyError, IndexError, TypeError, ValueError) as e:
+            raise ProviderError(f"gemini unexpected response: {type(e).__name__}: {r.text[:120]!r}") from e

@@ -381,7 +381,7 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
         views = [SourceView(i.id, i.publisher or i.source.name, i.source.tier, i.title, i.summary, i.original_url) for i in items]
         try:
             out = generate(provider, settings.voice, st.title, st.category, views, int(settings.drafting.get("max_chars", 280)))
-        except ProviderError as e:
+        except Exception as e:  # noqa: BLE001  one bad provider answer must never end the cycle
             stats["drafts_failed"] += 1
             event(s, "draft_failed", "story", st.id, error=str(e)[:300], provider=provider.name)
             log.warning("draft failed for story %s: %s", st.id, e)
@@ -432,7 +432,7 @@ def draft_one(s: Session, settings: Settings, story: Story, now: datetime, provi
         return None
     try:
         out = generate(provider, settings.voice, story.title, story.category, views, int(settings.drafting.get("max_chars", 280)))
-    except ProviderError as e:
+    except Exception as e:  # noqa: BLE001
         event(s, "draft_failed", "story", story.id, error=str(e)[:300], provider=provider.name)
         return None
     checks = run_checks(out.text, views, settings.drafting, check_links=check_links)
@@ -482,7 +482,7 @@ def draft_educational(s: Session, settings: Settings, stats: dict[str, Any], now
     channel = channel or _channel(settings)
     try:
         out = generate_educational(provider, settings.voice, note.text)
-    except ProviderError as e:
+    except Exception as e:  # noqa: BLE001
         event(s, "draft_failed", "note", note.id, error=str(e)[:300])
         return None
     story = Story(title=f"Note: {note.text[:90]}", category="educational", entities=[], first_seen_at=now,
