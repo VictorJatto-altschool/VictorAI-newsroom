@@ -1,0 +1,176 @@
+"""CLI: python -m victor <command>."""
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+from datetime import timezone
+
+from sqlalchemy import func, select
+
+from .config import load_settings
+from .db import init_engine, session
+from .models import Draft, Event, Item, Note, Post, Run, Source, Story
+from .pipeline import event, get_state, run_once, set_state, utcnow
+
+
+def _setup(args) -> tuple:
+    for stream in (sys.stdout, sys.stderr):  # Windows consoles default to cp1252
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
+                        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+    settings = load_settings()
+    init_engine(settings.env.database_url)
+    return settings
+
+
+def cmd_run(args):
+    settings = _setup(args)
+    if settings.env.dev_mode:
+        print("[DEV MODE] running without production keys; AI/Telegram/X use mocks where keys are missing")
+    stats = run_once(settings, check_links=not args.no_link_check)
+    for k, v in stats.items():
+        print(f"  {k:<18} {v}")
+
+
+def cmd_status(args):
+    settings = _setup(args)
+    with session() as s:
+        last = s.scalars(select(Run).order_by(Run.id.desc()).limit(1)).first()
+        print(f"mode: {get_state(s, 'mode', settings.automation['mode'])}   paused: {get_state(s, 'paused', 'false')}   dev_mode: {settings.env.dev_mode}")
+        if last:
+            print(f"last run: {last.started_at} ok={last.ok} stats={last.stats}")
+        counts = {
+            "sources": s.scalar(select(func.count(Source.id))),
+            "items": s.scalar(select(func.count(Item.id))),
+            "stories": s.scalar(select(func.count(Story.id))),
+            "drafts_pending": s.scalar(select(func.count(Draft.id)).where(Draft.status == "pending")),
+            "posts": s.scalar(select(func.count(Post.id))),
+        }
+        print(counts)
+        failing = s.scalars(select(Source).where(Source.consecutive_failures > 0)).all()
+        for f in failing:
+            print(f"  source failing: {f.name} x{f.consecutive_failures}: {f.last_error}")
+
+
+def cmd_stories(args):
+    _setup(args)
+    with session() as s:
+        rows = s.scalars(select(Story).order_by(Story.score.desc()).limit(args.limit)).all()
+        for st in rows:
+            print(f"#{st.id:<4} {st.score:5.1f} {st.classification:<10} {st.status:<10} src={st.source_count} t1={st.tier1_count} [{st.category}] {st.title[:80]}")
+
+
+def cmd_drafts(args):
+    _setup(args)
+    with session() as s:
+        rows = s.scalars(select(Draft).order_by(Draft.id.desc()).limit(args.limit)).all()
+        for d in rows:
+            print(f"#{d.id:<4} {d.status:<10} route={d.route:<10} checks={'ok' if d.checks_passed else 'FAIL'} story={d.story_id} {d.provider}\n    {d.text[:200].replace(chr(10), ' / ')}\n")
+
+
+def _decide(args, status: str):
+    _setup(args)
+    with session() as s:
+        d = s.get(Draft, args.draft_id)
+        if not d:
+            sys.exit(f"draft {args.draft_id} not found")
+        if status != "rejected" and not d.checks_passed:
+            sys.exit(f"draft {args.draft_id} failed checks: {[k for k, v in d.checks.items() if k != 'passed' and not v.get('ok')]}")
+        d.status = status
+        d.decided_at = utcnow()
+        event(s, f"draft_{status}", "draft", d.id, by="cli")
+        print(f"draft {d.id} -> {status}")
+
+
+def cmd_approve(args):
+    _decide(args, "approved")
+
+
+def cmd_night(args):
+    _decide(args, "approved_night")
+
+
+def cmd_reject(args):
+    _decide(args, "rejected")
+
+
+def cmd_pause(args):
+    _setup(args)
+    with session() as s:
+        set_state(s, "paused", "true")
+        event(s, "paused", by="cli")
+    print("paused: no automatic publishing until `resume`")
+
+
+def cmd_resume(args):
+    _setup(args)
+    with session() as s:
+        set_state(s, "paused", "false")
+        event(s, "resumed", by="cli")
+    print("resumed")
+
+
+def cmd_mode(args):
+    _setup(args)
+    with session() as s:
+        set_state(s, "mode", args.mode)
+        event(s, "mode_changed", mode=args.mode, by="cli")
+    print(f"mode -> {args.mode}")
+
+
+def cmd_note(args):
+    _setup(args)
+    with session() as s:
+        s.add(Note(text=args.text))
+    print("note saved")
+
+
+def cmd_posted(args):
+    _setup(args)
+    with session() as s:
+        rows = s.scalars(select(Post).order_by(Post.id.desc()).limit(args.limit)).all()
+        for p in rows:
+            print(f"#{p.id:<4} {p.status:<10} auto={p.autonomous} {p.remote_url or ''} {p.error or ''}\n    {p.text[:160].replace(chr(10), ' / ')}")
+
+
+def cmd_events(args):
+    _setup(args)
+    with session() as s:
+        for e in s.scalars(select(Event).order_by(Event.id.desc()).limit(args.limit)).all():
+            print(f"{e.at.replace(tzinfo=timezone.utc):%Y-%m-%d %H:%M} {e.kind:<16} {e.ref_type or '':<6} {e.ref_id or '':<5} {e.detail}")
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog="victor", description="Victor AI & Tech newsroom")
+    p.add_argument("-v", "--verbose", action="store_true")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("run", help="run one newsroom cycle")
+    r.add_argument("--no-link-check", action="store_true")
+    r.set_defaults(fn=cmd_run)
+    sub.add_parser("status").set_defaults(fn=cmd_status)
+    for name, fn in (("stories", cmd_stories), ("drafts", cmd_drafts), ("posted", cmd_posted), ("events", cmd_events)):
+        sp = sub.add_parser(name)
+        sp.add_argument("--limit", type=int, default=20)
+        sp.set_defaults(fn=fn)
+    for name, fn in (("approve", cmd_approve), ("night", cmd_night), ("reject", cmd_reject)):
+        sp = sub.add_parser(name)
+        sp.add_argument("draft_id", type=int)
+        sp.set_defaults(fn=fn)
+    sub.add_parser("pause").set_defaults(fn=cmd_pause)
+    sub.add_parser("resume").set_defaults(fn=cmd_resume)
+    m = sub.add_parser("mode")
+    m.add_argument("mode", choices=["manual", "approval", "restricted_autonomous"])
+    m.set_defaults(fn=cmd_mode)
+    n = sub.add_parser("note")
+    n.add_argument("text")
+    n.set_defaults(fn=cmd_note)
+    args = p.parse_args(argv)
+    args.fn(args)
+
+
+if __name__ == "__main__":
+    main()

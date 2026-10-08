@@ -1,0 +1,65 @@
+# Operator-owned settings. Every value here is enforced in code, never by the model.
+
+automation:
+  mode: approval            # manual | approval | restricted_autonomous
+  paused: false
+  timezone: Africa/Lagos
+
+overnight_rule:
+  window_start: "23:00"      # local time, autonomous posting allowed inside this window only
+  window_end: "07:00"
+  night_cap: 2               # max autonomous posts per window
+  min_tier1_sources: 1
+  min_other_sources: 2
+  allowed_categories: [ai_models, ai_tools, research, space, product_launch]
+  blocked_keywords: [lawsuit, sues, layoff, layoffs, fired, breach, hack, hacked, exploit, allegation, alleged, rumor, rumour, leak, leaked, election, senate, congress, president, minister, parliament, war, strike]
+
+limits:
+  max_posts_per_day: 6
+  max_posts_per_hour: 2
+  min_gap_minutes: 45
+  story_cooldown_days: 7
+  entity_cooldown_days: 3
+  max_drafts_per_run: 3
+
+scoring:
+  weights:
+    source_count: 25
+    velocity: 20
+    tier1_present: 25
+    novelty: 15
+    category_weight: 15
+  thresholds:
+    breaking: 85
+    hot: 70
+    trending: 55
+    developing: 40
+  category_weights:            # 0-1, how much the audience cares
+    ai_models: 1.0
+    ai_tools: 0.9
+    research: 0.7
+    product_launch: 0.8
+    space: 0.7
+    science: 0.5
+    cybersecurity: 0.6
+    tech: 0.6
+    business: 0.5
+    other: 0.3
+
+content_mix:                   # advisory shares, used for tie-breaking only
+  ai_models: 35
+  ai_tools: 30
+  tech: 15
+  space: 10
+  analysis: 10
+
+filter:
+  max_age_hours: 36
+  languages: [en]
+  drop_keywords: [sponsored, advertorial, giveaway, coupon, "promo code", horoscope]
+  require_any_keywords: []     # empty = rely on source category
+  min_title_chars: 20
+
+drafting:
+  max_chars: 280
+  provider_order: [gemini, groq, mock]

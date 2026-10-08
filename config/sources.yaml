@@ -1,0 +1,32 @@
+# Watch list. tier 1 = official/original, 2 = major reputable, 3 = tech press, 4 = aggregators/community.
+# kind: rss | hn | hf | reddit | gnews.  x_handle = official X account allowed for automatic quote posts.
+# Verified reachable on 2026-10-08. Anthropic, Mistral, xAI and SpaceX publish no RSS; they are covered by Google News queries.
+sources:
+  # --- Tier 1: official ---
+  - {name: OpenAI News,            kind: rss, x_handle: OpenAI,         url: https://openai.com/news/rss.xml,                  tier: 1, category: ai_models}
+  - {name: Google DeepMind Blog,   kind: rss, x_handle: GoogleDeepMind, url: https://deepmind.google/blog/rss.xml,            tier: 1, category: ai_models}
+  - {name: Google AI Blog,         kind: rss, x_handle: GoogleAI,       url: https://blog.google/technology/ai/rss/,          tier: 1, category: ai_models}
+  - {name: Hugging Face Blog,      kind: rss, x_handle: huggingface,    url: https://huggingface.co/blog/feed.xml,            tier: 1, category: ai_tools}
+  - {name: NVIDIA Blog,            kind: rss, x_handle: nvidia,         url: https://blogs.nvidia.com/feed/,                  tier: 1, category: tech}
+  - {name: Microsoft Blog,         kind: rss, x_handle: Microsoft,      url: https://blogs.microsoft.com/feed/,               tier: 1, category: ai_tools}
+  - {name: Meta Newsroom,          kind: rss, x_handle: Meta,           url: https://about.fb.com/feed/,                      tier: 1, category: tech}
+  - {name: NASA News,              kind: rss, x_handle: NASA,           url: https://www.nasa.gov/news-release/feed/,         tier: 1, category: space}
+  - {name: GitHub Blog,            kind: rss, x_handle: github,         url: https://github.blog/feed/,                       tier: 1, category: ai_tools}
+  - {name: arXiv cs.AI,            kind: rss,                           url: https://rss.arxiv.org/rss/cs.AI,                 tier: 1, category: research, interval_minutes: 180}
+  # --- Tier 2/3: press ---
+  - {name: TechCrunch AI,          kind: rss, url: https://techcrunch.com/category/artificial-intelligence/feed/,       tier: 3, category: ai_models}
+  - {name: The Verge AI,           kind: rss, url: https://www.theverge.com/rss/ai-artificial-intelligence/index.xml,  tier: 3, category: ai_models}
+  - {name: Ars Technica,           kind: rss, url: https://feeds.arstechnica.com/arstechnica/technology-lab,          tier: 3, category: tech}
+  - {name: MIT Technology Review,  kind: rss, url: https://www.technologyreview.com/feed/,                            tier: 2, category: research}
+  - {name: Wired AI,               kind: rss, url: https://www.wired.com/feed/tag/ai/latest/rss,                      tier: 3, category: ai_models}
+  - {name: Space.com,              kind: rss, url: https://www.space.com/feeds/all,                                   tier: 3, category: space}
+  # --- Aggregators and community (tier 4): early signal, never the sole source ---
+  - {name: Techmeme,               kind: rss,   url: https://www.techmeme.com/feed.xml,                                tier: 4, category: tech}
+  - {name: Google News AI models,  kind: gnews, query: "artificial intelligence model release",                       tier: 4, category: ai_models}
+  - {name: Google News AI tools,   kind: gnews, query: "AI tool launch",                                              tier: 4, category: ai_tools}
+  - {name: Google News AI labs,    kind: gnews, query: "OpenAI OR Anthropic OR DeepMind OR xAI OR Mistral",           tier: 4, category: ai_models}
+  - {name: Google News SpaceX,     kind: gnews, query: "SpaceX OR Starship OR NASA launch",                           tier: 4, category: space}
+  - {name: Hacker News Front,      kind: hn,    url: "https://hnrss.org/frontpage?points=100",                        tier: 4, category: tech}
+  - {name: Hugging Face Trending,  kind: hf,    url: "https://huggingface.co/api/models?sort=trendingScore&direction=-1&limit=20", tier: 4, category: ai_models, interval_minutes: 120}
+  - {name: Reddit r/artificial,    kind: reddit, url: "https://www.reddit.com/r/artificial/top/.rss?t=day",           tier: 4, category: ai_models, interval_minutes: 120}
+  - {name: Reddit r/LocalLLaMA,    kind: reddit, url: "https://www.reddit.com/r/LocalLLaMA/top/.rss?t=day",           tier: 4, category: ai_models, interval_minutes: 120}

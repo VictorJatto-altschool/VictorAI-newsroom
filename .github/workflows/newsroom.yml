@@ -1,0 +1,66 @@
+name: newsroom
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # GitHub may delay scheduled runs by several minutes
+  workflow_dispatch:
+
+concurrency:
+  group: newsroom
+  cancel-in-progress: false
+
+jobs:
+  cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_ENV: ${{ secrets.APP_ENV }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      TZ_NAME: Africa/Lagos
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      NASA_API_KEY: ${{ secrets.NASA_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install ".[postgres]"
+
+      # Fallback state when no DATABASE_URL secret is set: keep the SQLite file in the Actions cache.
+      # Best-effort only (cache can be evicted). Set DATABASE_URL to a free Supabase/Neon Postgres for real use.
+      - name: Restore SQLite state
+        if: env.DATABASE_URL == ''
+        uses: actions/cache/restore@v4
+        with:
+          path: data/victor.db
+          key: victor-db-${{ github.run_id }}
+          restore-keys: victor-db-
+
+      - run: python -m victor run
+
+      - name: Save SQLite state
+        if: env.DATABASE_URL == '' && always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/victor.db
+          key: victor-db-${{ github.run_id }}
+
+  tests:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ".[dev]"
+      - run: pytest -q
