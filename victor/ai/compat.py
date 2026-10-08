@@ -71,19 +71,25 @@ class OpenAICompatProvider:
                     return self._complete(system, user, max_tokens)
             raise
 
-    def _complete(self, system: str, user: str, max_tokens: int = 600) -> str:
+    def _complete(self, system: str, user: str, max_tokens: int = 600, json_mode: bool = True) -> str:
+        reasoning = "gpt-oss" in self.model.lower() or "qwen3" in self.model.lower() or "deepseek-r1" in self.model.lower()
         body = {
             "model": self.model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "temperature": 0.4,
-            "max_tokens": max_tokens,
+            "max_tokens": max(max_tokens, 1500) if reasoning else max_tokens,  # reasoning tokens count too
         }
-        if self.name not in ("ollama",):
+        if reasoning and self.name == "groq":
+            body["reasoning_effort"] = "low"
+        if json_mode and self.name not in ("ollama",):
             body["response_format"] = {"type": "json_object"}
         try:
             r = httpx.post(f"{self._base}/chat/completions", headers=self._headers(), json=body, timeout=self._timeout)
         except httpx.HTTPError as e:
             raise ProviderError(f"{self.name} network error: {e}") from e
+        if r.status_code == 400 and json_mode and "json" in r.text.lower():
+            # Some models cannot do strict JSON mode; our parser tolerates prose around the object.
+            return self._complete(system, user, max_tokens, json_mode=False)
         if r.status_code != 200:
             raise ProviderError(f"{self.name} http {r.status_code}: {r.text[:200]}")
         try:
