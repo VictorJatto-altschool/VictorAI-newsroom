@@ -10,6 +10,7 @@ import httpx
 from .base import DraftCard, render_card
 
 log = logging.getLogger(__name__)
+UPDATES_TIMEOUT = 5.0  # getUpdates is a quick poll; a slow Telegram must not hold up collection
 
 
 def draft_keyboard(draft_id: int) -> dict:
@@ -92,11 +93,13 @@ class TelegramChannel:
 
     # ---- inbound
     def get_updates(self, offset: int | None, timeout: int = 0) -> list[dict]:
+        """One short poll. `timeout` is Telegram's long-poll wait and is capped so the cycle never stalls."""
+        timeout = max(0, min(int(timeout), int(UPDATES_TIMEOUT)))
         payload = {"timeout": timeout, "allowed_updates": ["message", "callback_query"]}
         if offset is not None:
             payload["offset"] = offset
         try:
-            r = httpx.post(f"{self._base}/getUpdates", json=payload, timeout=self._timeout + timeout)
+            r = httpx.post(f"{self._base}/getUpdates", json=payload, timeout=UPDATES_TIMEOUT + timeout)
             data = r.json()
         except (httpx.HTTPError, ValueError) as e:
             log.warning("telegram getUpdates failed: %s", e)

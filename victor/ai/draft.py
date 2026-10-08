@@ -129,20 +129,28 @@ def run_checks(text: str, sources: list[SourceView], cfg: dict[str, Any], check_
     results["hook_length"] = {"ok": 0 < len(first) <= 100, "value": len(first)}
     results["hook_not_generic"] = {"ok": not re.match(r"^\W*(breaking|just in|new)\W*:?\s*$", first.strip(), re.I)}
     if check_links:
-        results["source_link_resolves"] = {"ok": _link_ok(sources[0].url) if sources else False}
+        results["source_link_resolves"] = _link_check(sources[0].url) if sources else {"ok": False}
     results["passed"] = all(v.get("ok", False) for k, v in results.items() if k != "passed")
     return results
 
 
-def _link_ok(url: str) -> bool:
+LINK_TIMEOUT = 5.0
+
+
+def _link_check(url: str) -> dict[str, Any]:
+    """A dead link (4xx/5xx) fails the check. A slow or unreachable host is a warning on the card, not a
+    failure: on a flaky connection the newsroom must keep moving, and the operator sees the warning."""
     try:
-        r = httpx.head(url, follow_redirects=True, timeout=10.0)
+        r = httpx.head(url, follow_redirects=True, timeout=LINK_TIMEOUT)
         if r.status_code in (403, 405):  # some CDNs refuse HEAD
-            r = httpx.get(url, follow_redirects=True, timeout=10.0)
-        return r.status_code < 400
+            r = httpx.get(url, follow_redirects=True, timeout=LINK_TIMEOUT)
+        return {"ok": r.status_code < 400, "status": r.status_code}
+    except httpx.TimeoutException:
+        log.info("link check timed out for %s after %.0fs", url, LINK_TIMEOUT)
+        return {"ok": True, "warning": f"link check timed out after {LINK_TIMEOUT:.0f}s"}
     except httpx.HTTPError as e:
-        log.info("link check failed for %s: %s", url, e)
-        return False
+        log.info("link check could not reach %s: %s", url, type(e).__name__)
+        return {"ok": True, "warning": f"link check could not reach the host ({type(e).__name__})"}
 
 
 __all__ = ["pick_provider", "generate", "run_checks", "SourceView", "DraftOutput", "ProviderError"]

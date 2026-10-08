@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import logging
 import re
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -15,7 +16,7 @@ from .ai.draft import ProviderError, SourceView, generate, pick_provider, run_ch
 from .channels.base import DraftCard
 from .channels.console import ConsoleChannel
 from .channels.telegram import TelegramChannel
-from .collect.fetch import FetchResult, fetch_source, make_client
+from .collect.fetch import FETCH_DEADLINE, FetchResult, fetch_source, make_client
 from .collect.normalize import host_of, normalize_publisher
 from .config import Settings, SourceConfig
 from .db import session
@@ -34,7 +35,7 @@ from .publish.x import XPublisher
 log = logging.getLogger(__name__)
 ACTIVE_WINDOW = timedelta(hours=48)
 DEFAULT_FETCH_WORKERS = 8      # sources fetched at the same time; a slow feed no longer holds up the rest
-DEFAULT_DUE_GRACE_MINUTES = 10  # GitHub starts cron runs late and unevenly; never skip a source over that jitter
+DEFAULT_DUE_GRACE_MINUTES = 5   # GitHub cron runs land 25-35 min apart; never skip a 30-min source over that jitter
 
 
 def utcnow() -> datetime:
@@ -108,21 +109,48 @@ def _collect_cfg(settings: Settings) -> dict[str, Any]:
 
 
 def fetch_all(due: list[tuple[SourceConfig, str | None, str | None]], fetcher=fetch_source,
-              workers: int = DEFAULT_FETCH_WORKERS) -> list[FetchResult]:
-    """Fetch every due source concurrently and return results in the same order as `due`.
+              workers: int = DEFAULT_FETCH_WORKERS, deadline: float = FETCH_DEADLINE) -> list[FetchResult]:
+    """Fetch every due source concurrently, each under a hard total deadline, in the order of `due`.
 
-    Fetching 35+ feeds one after another with a 15 s timeout each could take minutes when a few sources
-    stall; in parallel the whole watch list takes about as long as the slowest single feed.
+    Fetching 35+ feeds one after another could take minutes when a few sources stall; in parallel the
+    whole watch list takes about as long as the slowest single feed, and that one is cut off at
+    `deadline` seconds total (connect plus every read), not just per socket operation.
     One httpx.Client is shared: it is thread-safe and reuses connections. Nothing in here touches the DB.
     """
     if not due:
         return []
     workers = max(1, min(int(workers), len(due)))
-    with make_client() as client:
-        if workers == 1:
-            return [fetcher(cfg, etag, lm, client=client) for cfg, etag, lm in due]
-        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="fetch") as pool:
-            return list(pool.map(lambda d: fetcher(d[0], d[1], d[2], client=client), due))
+    client = make_client()
+    pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="fetch")
+    started: dict[int, float] = {}  # index -> monotonic time the worker actually began; queued sources are not charged
+
+    def run(i: int, cfg: SourceConfig, etag: str | None, lm: str | None) -> FetchResult:
+        started[i] = time.monotonic()
+        return fetcher(cfg, etag, lm, client=client)
+
+    futures = [pool.submit(run, i, cfg, etag, lm) for i, (cfg, etag, lm) in enumerate(due)]
+    results: list[FetchResult | None] = [None] * len(due)
+    pending = set(range(len(due)))
+    while pending:
+        wait([futures[i] for i in pending], timeout=0.05, return_when=FIRST_COMPLETED)
+        t = time.monotonic()
+        for i in sorted(pending):
+            fut = futures[i]
+            if fut.done():
+                try:
+                    results[i] = fut.result()
+                except Exception as e:  # noqa: BLE001  fetch_source already catches; this guards custom fetchers
+                    results[i] = FetchResult(ok=False, items=[], error=f"{type(e).__name__}: {e}"[:300])
+                pending.discard(i)
+            elif i in started and t - started[i] >= deadline:
+                log.warning("fetch timed out %s: over %.0fs budget", due[i][0].name, deadline)
+                results[i] = FetchResult(ok=False, items=[], error=f"Timeout: over {deadline:.0f}s budget")
+                pending.discard(i)
+    # Do not wait for a stuck source: its thread ends on its own when the socket read times out.
+    pool.shutdown(wait=False, cancel_futures=True)
+    if all(f.done() for f in futures):
+        client.close()
+    return results  # type: ignore[return-value]  every slot is filled when the loop exits
 
 
 def _existing_urls(s: Session, urls: list[str]) -> set[str]:
@@ -148,7 +176,8 @@ def collect(s: Session, settings: Settings, stats: dict[str, Any], now: datetime
     for cfg in due_cfgs:
         rows[cfg.key].last_attempt_at = now
     stats["sources_checked"] = len(due)
-    results = fetch_all(due, fetcher=fetcher, workers=int(ccfg.get("workers", DEFAULT_FETCH_WORKERS)))
+    results = fetch_all(due, fetcher=fetcher, workers=int(ccfg.get("workers", DEFAULT_FETCH_WORKERS)),
+                        deadline=float(ccfg.get("source_timeout_seconds", FETCH_DEADLINE)))
     seen = _existing_urls(s, [raw.canonical_url for res in results for raw in res.items if raw.canonical_url])
     for cfg, res in zip(due_cfgs, results):
         row = rows[cfg.key]
@@ -632,11 +661,51 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
 # ----------------------------------------------------------------------------- run
 
 
-def run_once(settings: Settings, now: datetime | None = None, **overrides: Any) -> dict[str, Any]:
+class _Timer:
+    """Wall-clock seconds per stage, so a slow cycle shows where the time went in the Actions log."""
+
+    def __init__(self) -> None:
+        self.stages: dict[str, float] = {}
+        self._t0 = time.perf_counter()
+
+    def __call__(self, name: str):
+        timer = self
+
+        class _Stage:
+            def __enter__(self_):
+                self_.t = time.perf_counter()
+
+            def __exit__(self_, *exc):
+                timer.stages[name] = round(timer.stages.get(name, 0.0) + time.perf_counter() - self_.t, 2)
+
+        return _Stage()
+
+    def total(self) -> float:
+        return round(time.perf_counter() - self._t0, 2)
+
+    def summary(self) -> str:
+        parts = " ".join(f"{k} {v:.1f}s" for k, v in self.stages.items())
+        return f"cycle {self.total():.1f}s: {parts}"
+
+
+def _commands(s: Session, settings: Settings, channel, now: datetime, provider) -> int:
+    """Pull Telegram updates; a Telegram outage or timeout must never stall collection or publishing."""
     from .channels.commands import process_updates
 
+    if not hasattr(channel, "get_updates"):
+        return 0
+    try:
+        return process_updates(s, settings, channel, now, provider)
+    except Exception as e:  # noqa: BLE001
+        log.warning("command processing failed, continuing the cycle: %s: %s", type(e).__name__, e)
+        event(s, "commands_failed", error=f"{type(e).__name__}: {e}"[:300])
+        return 0
+
+
+def run_once(settings: Settings, now: datetime | None = None, **overrides: Any) -> dict[str, Any]:
     now = now or utcnow()
     stats: dict[str, Any] = {"dev_mode": settings.env.dev_mode}
+    timer = _Timer()
     channel = overrides.get("channel") or _channel(settings)
     provider = overrides.get("provider") or pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
     publisher = overrides.get("publisher") or _publisher(settings)
@@ -646,27 +715,35 @@ def run_once(settings: Settings, now: datetime | None = None, **overrides: Any) 
         s.add(run)
         s.flush()
         try:
-            if hasattr(channel, "get_updates"):
-                stats["commands_handled"] = process_updates(s, settings, channel, now, provider)
-            new_items = collect(s, settings, stats, now, fetcher=overrides.get("fetcher", fetch_source))
-            cluster_items(s, new_items, stats, now)
-            rescore(s, settings, stats, now)
-            draft_stories(s, settings, stats, now, provider=provider, channel=channel, check_links=check_links)
-            draft_educational(s, settings, stats, now, provider=provider, channel=channel)
-            publish_approved(s, settings, stats, now, publisher=publisher, channel=channel)
-            stats["digest_sent"] = maybe_send_digest(s, settings, channel, now)
+            with timer("commands"):
+                stats["commands_handled"] = _commands(s, settings, channel, now, provider)
+            with timer("collect"):
+                new_items = collect(s, settings, stats, now, fetcher=overrides.get("fetcher", fetch_source))
+            with timer("cluster"):
+                cluster_items(s, new_items, stats, now)
+            with timer("score"):
+                rescore(s, settings, stats, now)
+            with timer("draft"):
+                draft_stories(s, settings, stats, now, provider=provider, channel=channel, check_links=check_links)
+                draft_educational(s, settings, stats, now, provider=provider, channel=channel)
+            with timer("publish"):
+                publish_approved(s, settings, stats, now, publisher=publisher, channel=channel)
+                stats["digest_sent"] = maybe_send_digest(s, settings, channel, now)
             if settings.raw.get("dashboard", {}).get("enabled", True) and overrides.get("dashboard", True):
                 from .dashboard import write_dashboard
 
-                write_dashboard(s, settings, now)
-            if hasattr(channel, "get_updates"):  # pick up anything that arrived during the cycle
-                stats["commands_handled"] += process_updates(s, settings, channel, now, provider)
+                with timer("dashboard"):
+                    write_dashboard(s, settings, now)
+            with timer("commands"):  # pick up anything that arrived during the cycle
+                stats["commands_handled"] += _commands(s, settings, channel, now, provider)
             run.ok = True
         except Exception as e:  # noqa: BLE001
             run.error = f"{type(e).__name__}: {e}"[:1000]
             log.exception("run failed")
             raise
         finally:
+            stats["timings"] = {**timer.stages, "total": timer.total()}
+            log.info("%s", timer.summary())
             run.finished_at = utcnow()
             run.stats = stats
     return stats

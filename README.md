@@ -65,11 +65,11 @@ Once `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set, every draft arrives as
 
 ## How a story becomes a post
 
-1. Feeds are fetched in parallel (`collect.workers` in `settings.yaml`) with conditional GET, so a run takes about as long as its slowest feed; a failing source backs off and never stops the others. A source counts as due a few minutes early (`collect.due_grace_minutes`), so GitHub's late cron starts never make a feed wait for the next cycle.
+1. Feeds are fetched in parallel (`collect.workers` in `settings.yaml`) with conditional GET and a hard 15 s budget per source, so a run takes about as long as its slowest feed; a failing source backs off and never stops the others. A source counts as due a few minutes early (`collect.due_grace_minutes`), so GitHub's late cron starts never make a feed wait for the next cycle.
 2. Items are normalized and cheaply filtered (old, off-topic, sponsored, non-English).
 3. Items about the same event are clustered into one story. Google News copies of an official post count as the same publisher.
 4. Stories are scored from counts only. One source never reaches "trending" unless it is an official announcement under 3 hours old.
-5. The top 3 stories per run are drafted from their own source texts, then checked: length, no URLs or hashtags, every number appears in a source, no hype words, source link resolves.
+5. The top 3 stories per run are drafted from their own source texts, then checked: length, no URLs or hashtags, every number appears in a source, no hype words, source link resolves. The link check has a 5 s budget; a slow host is a warning on the card, a dead link (4xx/5xx) is a failed check.
 6. Media by rights: quote an official X post found in the sources; else attach a public-domain image (NASA's library is searched automatically for space stories); else render an original 1080×1080 card and an 8-second clip with ffmpeg. Official YouTube channels are watched through their free RSS feeds; when a story has an official video, its link goes in the first reply under the source link, because external links in the post itself reduce reach on X.
 7. The overnight rule decides the route. Autonomous only in `restricted_autonomous` mode, inside the window, with an official source plus two others, an allowed category, no sensitive keyword, under the night cap and the posting limits. Everything else waits for you.
 8. Approved drafts publish at the next slot that respects the limits. One idempotency key per draft version, so a retry can never double-post. A timeout after submit is `uncertain`, reconciled against your timeline when the API tier allows, never resubmitted blindly.

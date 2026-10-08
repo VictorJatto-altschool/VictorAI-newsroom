@@ -57,7 +57,8 @@ content_mix:                   # advisory shares, used for tie-breaking only
 
 collect:
   workers: 8                   # feeds fetched at the same time; the watch list takes about as long as its slowest feed
-  due_grace_minutes: 10        # a source is due this many minutes early, so GitHub's late cron starts never skip a cycle
+  source_timeout_seconds: 15   # hard total budget per source (connect + reads); over it, the source counts as failed
+  due_grace_minutes: 5         # a source is due this many minutes early, so cron runs 25-35 min apart never skip a 30-min feed
 
 filter:
   max_age_hours: 36

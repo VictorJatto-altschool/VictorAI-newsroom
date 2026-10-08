@@ -35,6 +35,9 @@ class Channel(Protocol):
 def render_card(card: DraftCard) -> str:
     srcs = "\n".join(f"  - {p}: {u}" for p, u in card.sources[:6])
     checks = ", ".join(k for k, v in card.checks.items() if k != "passed" and not v.get("ok", True)) or "all passed"
+    warnings = [v["warning"] for v in card.checks.values() if isinstance(v, dict) and v.get("warning")]
+    if warnings:
+        checks += " | warning: " + "; ".join(warnings)
     label = "[DEV MODE] " if card.dev_mode else ""
     media = card.media.get("mode", "none")
     media_line = f"{media} {card.media.get('url', '')}".strip()

@@ -22,7 +22,8 @@ from .normalize import (
 
 log = logging.getLogger(__name__)
 UA = "VictorNewsroom/0.1 (+https://x.com/SI4blog_; polite RSS collector)"
-TIMEOUT = httpx.Timeout(15.0, connect=10.0)
+TIMEOUT = httpx.Timeout(10.0, connect=5.0)  # per operation; the 15 s total budget per source is enforced in pipeline.fetch_all
+FETCH_DEADLINE = 15.0  # seconds a single source may take in total, connect + every read
 
 
 @dataclass
