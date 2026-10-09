@@ -1,0 +1,34 @@
+name: keepalive
+
+# Watchdog. GitHub fires this whenever a "telegram" run ends, whatever the reason: finished, failed, cancelled,
+# or the runner was shut down from under it. It relaunches the always-on loop unless one is already running.
+# This is what the loop's own last step cannot do when the runner dies.
+
+on:
+  workflow_run:
+    workflows: [telegram]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  relaunch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Relaunch the newsroom loop if none is running
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          sleep 20   # let GitHub settle the run that just ended
+          active=$(gh run list --repo "$REPO" --workflow telegram.yml --status in_progress --json databaseId --jq 'length')
+          queued=$(gh run list --repo "$REPO" --workflow telegram.yml --status queued --json databaseId --jq 'length')
+          echo "in_progress=$active queued=$queued"
+          if [ "$active" = "0" ] && [ "$queued" = "0" ]; then
+            gh workflow run telegram.yml --repo "$REPO" --ref main
+            echo "relaunched"
+          else
+            echo "a loop is already alive; nothing to do"
+          fi

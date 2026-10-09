@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from datetime import timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
@@ -191,6 +191,28 @@ def cmd_loop(args):
     settings = _setup(args)
     tg = TelegramChannel(settings.env.telegram_bot_token, settings.env.telegram_chat_id) if settings.env.has_telegram else None
     provider = pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
+    from .pipeline import get_state, set_state
+
+    LEASE_SECONDS = 180
+
+    def lease_alive() -> bool:
+        with session() as s:
+            v = get_state(s, "loop_lease", "")
+        try:
+            return bool(v) and (utcnow() - datetime.fromisoformat(v)).total_seconds() < LEASE_SECONDS
+        except ValueError:
+            return False
+
+    def heartbeat() -> None:
+        with session() as s:
+            set_state(s, "loop_lease", utcnow().isoformat())
+
+    if args.lease:
+        if lease_alive():
+            print("another newsroom loop is alive (lease fresh); exiting so we never run two", flush=True)
+            return
+        heartbeat()
+    last_beat = time.time()
     stop_at = time.time() + args.max_minutes * 60 if args.max_minutes else None
     print(f"loop: cycle every {args.minutes} min; Telegram {'on' if tg else 'off'}"
           f"{f'; stops after {args.max_minutes} min' if stop_at else ''}; Ctrl+C to stop", flush=True)
@@ -211,7 +233,19 @@ def cmd_loop(args):
                 except Exception as e:  # noqa: BLE001
                     print(f"poll error: {type(e).__name__}: {e}", flush=True)
                     time.sleep(5)
+            if args.lease and time.time() - last_beat > 60:
+                try:
+                    heartbeat()
+                    last_beat = time.time()
+                except Exception as e:  # noqa: BLE001
+                    print(f"lease heartbeat failed: {type(e).__name__}", flush=True)
             time.sleep(3)
+    if args.lease:
+        try:
+            with session() as s:
+                set_state(s, "loop_lease", "")  # hand over cleanly so the successor starts at once
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def cmd_dashboard(args):
@@ -335,6 +369,7 @@ def main(argv=None):
     lp = sub.add_parser("loop", help="run cycles continuously while the laptop is on")
     lp.add_argument("--minutes", type=int, default=20)
     lp.add_argument("--max-minutes", type=int, default=0, help="exit after this long (0 = run until stopped)")
+    lp.add_argument("--lease", action="store_true", help="exit immediately if another loop holds a fresh lease in the database")
     lp.set_defaults(fn=cmd_loop)
     rd = sub.add_parser("render", help="render the card/clip for a draft")
     rd.add_argument("draft_id", type=int)

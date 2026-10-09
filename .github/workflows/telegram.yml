@@ -11,7 +11,7 @@ on:
 
 concurrency:
   group: telegram-poller
-  cancel-in-progress: true
+  cancel-in-progress: false   # never kill a healthy loop; a duplicate exits on its own via the database lease
 
 permissions:
   actions: write             # to launch the next job in the chain
@@ -51,10 +51,6 @@ jobs:
               print(f"{k:<20} {'set (' + str(len(v)) + ' chars)' if v.strip() else 'EMPTY'}")
           PY
       - name: Newsroom loop (cycle every 15 min, buttons answered in between)
-        run: python -m victor loop --minutes 15 --max-minutes 340
+        run: python -m victor loop --minutes 15 --max-minutes 340 --lease
 
-      - name: Launch the next job in the chain
-        if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run telegram.yml --ref main
+      # The successor is launched by keepalive.yml when this run ends, however it ends.
