@@ -224,7 +224,10 @@ def download_licensed(url: str, name: str, client: httpx.Client | None = None) -
 
 
 def prepare_media(draft_media: dict, headline: str, post_text: str, category: str, handle: str,
-                  want_clip: bool = True, lookup_person=wiki_person_image, lookup_video=None) -> dict:
+                  want_clip: bool = True, lookup_person=wiki_person_image, lookup_video=None,
+                  allow_render: bool = True) -> dict:
+    """allow_render=False: the post already has a link with its own preview, so if no real media is found,
+    return mode 'link' instead of rendering a card."""
     if lookup_video is None:
         lookup_video = nasa_video_search
     """Return the media dict with a local `path` filled in where a file is needed. Never raises."""
@@ -259,6 +262,9 @@ def prepare_media(draft_media: dict, headline: str, post_text: str, category: st
                 media["path"] = str(p)
                 return media
             mode = "render"
+        if mode == "render" and not allow_render:
+            media.update(mode="link", path="", rights="n/a", kind="link")
+            return media
         if mode == "render":
             card = render_card(headline, facts_from_text(post_text), handle, category.replace("_", " "),
                                MEDIA_DIR / f"{_slug(headline)}.png")

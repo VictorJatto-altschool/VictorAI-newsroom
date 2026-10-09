@@ -573,6 +573,25 @@ def _api_reply_text(d: Draft, mode: str) -> str:
     return f"Source: {primary.publisher or primary.source.name}{tail}."
 
 
+_PREVIEW_TAG = re.compile(r'<meta[^>]+(?:property|name)=["\'](?:og:image|twitter:image)(?::src)?["\']', re.I)
+
+
+def _link_has_preview(url: str, timeout: float = 8.0) -> bool:
+    """Will X draw a card with a picture for this link? YouTube always; a page only if it declares an image tag."""
+    if not url:
+        return False
+    if "youtube.com" in url or "youtu.be" in url:
+        return True
+    try:
+        import httpx
+
+        r = httpx.get(url, timeout=timeout, follow_redirects=True,
+                      headers={"User-Agent": "Mozilla/5.0 (compatible; VictorNewsroom/0.1)"})
+        return r.status_code < 400 and bool(_PREVIEW_TAG.search(r.text[:200_000]))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _post_link(reply_text: str) -> str:
     """From 'Source: <url>\\nVideo: <url>' pick the video link first, else the source link."""
     found = {}
@@ -655,9 +674,15 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
         s.add(post)
         s.flush()
         media = d.media or {}
+        link = _post_link(d.reply_text) if (manual and pub_cfg.get("link_in_post", True)) else ""
+        # Real photo or footage beats everything; a link that brings its own preview beats the rendered card;
+        # the card is only for posts that would otherwise be bare text.
+        link_preview = bool(link) and not pub_cfg.get("render_when_link_preview", False) and _link_has_preview(link)
         if pub_cfg.get("prepare_media", True) and media.get("mode") in ("upload", "render"):
             media = prepare_media(media, d.story.title, d.text, d.story.category, f"@{pub_cfg.get('x_username', '')}",
-                                  want_clip=bool(pub_cfg.get("render_clip", True)))
+                                  want_clip=bool(pub_cfg.get("render_clip", True)), allow_render=not link_preview)
+            if media.get("mode") == "link":
+                media["url"] = link
             d.media = media
         reply = d.reply_text
         text = d.text
