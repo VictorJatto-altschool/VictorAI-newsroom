@@ -291,9 +291,33 @@ def cluster_items(s: Session, new_items: list[Item], stats: dict[str, Any], now:
     s.flush()
 
 
+HANDOFF_COUNTS_FOR_HOURS = 2    # a fresh hand-off counts as a post so spacing holds while you post it
+HANDOFF_ABANDON_HOURS = 6       # a hand-off ignored this long is treated as skipped
+
+
 def _recent_posts(s: Session, days: float, now: datetime) -> list[Post]:
+    """Posts that count toward limits and cooldowns: confirmed posts, plus hand-offs still fresh enough that
+    you are probably about to post them. Old unconfirmed hand-offs never count."""
     since = now - timedelta(days=days)
-    return s.scalars(select(Post).where(Post.created_at >= since, Post.status.in_(("published", "mock", "manual")))).all()
+    rows = s.scalars(select(Post).where(Post.created_at >= since, Post.status.in_(("published", "mock", "manual")))).all()
+    fresh = now - timedelta(hours=HANDOFF_COUNTS_FOR_HOURS)
+    return [p for p in rows if p.status != "manual" or _aware(p.created_at) >= fresh]
+
+
+def abandon_stale_handoffs(s: Session, channel, now: datetime) -> int:
+    """Ready posts nobody acted on for HANDOFF_ABANDON_HOURS are marked skipped and removed from the chat."""
+    cutoff = now - timedelta(hours=HANDOFF_ABANDON_HOURS)
+    n = 0
+    for p in s.scalars(select(Post).where(Post.status == "manual", Post.created_at < cutoff)).all():
+        p.status = "skipped"
+        if p.draft is not None:
+            p.draft.status = "skipped"
+            if p.draft.channel_ref and hasattr(channel, "delete_message"):
+                channel.delete_message(p.draft.channel_ref)
+        n += 1
+    if n:
+        event(s, "handoffs_abandoned", count=n)
+    return n
 
 
 def rescore(s: Session, settings: Settings, stats: dict[str, Any], now: datetime | None = None) -> None:
@@ -670,6 +694,7 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
         stats["paused"] = True
         return []
     stats["reconciled"] = reconcile_uncertain(s, publisher, channel, now)
+    stats["handoffs_abandoned"] = abandon_stale_handoffs(s, channel, now)
     pub_cfg = settings.raw.get("publishing", {})
     tz = ZoneInfo(settings.automation.get("timezone", "UTC"))
     local = now.astimezone(tz)
