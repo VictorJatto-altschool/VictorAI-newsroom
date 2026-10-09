@@ -69,8 +69,8 @@ def resolve_gnews(url: str, client: httpx.Client | None = None, timeout: float =
             headers={"content-type": "application/x-www-form-urlencoded;charset=UTF-8"},
         )
         chunks = resp.text.split("\n\n")
-        if len(chunks) < 2:
-            return url
+        if resp.status_code != 200 or len(chunks) < 2:
+            raise ValueError(f"batchexecute HTTP {resp.status_code}: {resp.text[:60]!r}")
         parsed = json.loads(chunks[1])
         inner = json.loads(parsed[0][2])
         real = inner[1]
@@ -83,14 +83,24 @@ def resolve_gnews(url: str, client: httpx.Client | None = None, timeout: float =
             client.close()
 
 
-def resolve_many(urls: list[str], workers: int = 6, timeout: float = 15.0) -> dict[str, str]:
-    """Resolve several wrappers concurrently. Unresolved ones map to themselves."""
+def resolve_many(urls: list[str], workers: int = 2, timeout: float = 15.0, give_up_after: int = 4) -> dict[str, str]:
+    """Resolve several wrappers a few at a time. Unresolved ones map to themselves.
+
+    Google refuses the internal endpoint to an address that calls it too often (the whole cloud host shares one).
+    When the first `give_up_after` lookups all fail, the rest of the batch is left alone so the block can lift."""
     urls = [u for u in dict.fromkeys(urls) if is_gnews(u)]
     if not urls:
         return {}
     out: dict[str, str] = {}
     with httpx.Client(timeout=timeout, follow_redirects=True, headers=_HEADERS, cookies=_COOKIES) as client:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            for u, real in zip(urls, pool.map(lambda x: resolve_gnews(x, client, timeout), urls)):
-                out[u] = real
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            for start in range(0, len(urls), max(1, workers)):
+                chunk = urls[start:start + max(1, workers)]
+                for u, real in zip(chunk, pool.map(lambda x: resolve_gnews(x, client, timeout), chunk)):
+                    out[u] = real
+                done = list(out.items())
+                if len(done) >= give_up_after and all(is_gnews(v) for _, v in done):
+                    log.warning("gnews: Google is refusing link resolution right now; leaving %d wrappers for later",
+                                len(urls) - len(done))
+                    break
     return out

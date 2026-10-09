@@ -162,8 +162,11 @@ def _existing_urls(s: Session, urls: list[str]) -> set[str]:
     return seen
 
 
+GNEWS_BACKOFF_MINUTES = 90
+
+
 def _resolve_gnews_links(s: Session, due_cfgs: list[SourceConfig], results: list[FetchResult], cap: int,
-                         resolver=None) -> int:
+                         resolver=None, now: datetime | None = None) -> int:
     """Swap Google News wrapper links for the publisher's real address on items we have not stored yet.
 
     X only shows a preview card for the real address, and the real address is what lets a Google News copy
@@ -176,8 +179,14 @@ def _resolve_gnews_links(s: Session, due_cfgs: list[SourceConfig], results: list
             for raw in res.items if is_gnews(raw.original_url)]
     if not raws or cap <= 0:
         return 0
+    now = now or utcnow()
+    until = get_state(s, "gnews_backoff_until", "")
+    if until and datetime.fromisoformat(until) > now:
+        return 0  # Google refused a whole batch recently; the wrappers stay as they are until the block lifts
     known = _existing_urls(s, [r.canonical_url for r in raws])
     todo = [r for r in raws if r.canonical_url not in known][:cap]
+    if not todo:
+        return 0
     mapping = resolver([r.original_url for r in todo])
     n = 0
     for r in todo:
@@ -185,6 +194,11 @@ def _resolve_gnews_links(s: Session, due_cfgs: list[SourceConfig], results: list
         if real and not is_gnews(real):
             r.original_url, r.canonical_url = real, canonical_url(real)
             n += 1
+    if n == 0:
+        set_state(s, "gnews_backoff_until", (now + timedelta(minutes=GNEWS_BACKOFF_MINUTES)).isoformat())
+        log.warning("gnews: none of %d links resolved; pausing resolution for %d minutes", len(todo), GNEWS_BACKOFF_MINUTES)
+    elif until:
+        set_state(s, "gnews_backoff_until", "")
     return n
 
 
@@ -204,8 +218,8 @@ def collect(s: Session, settings: Settings, stats: dict[str, Any], now: datetime
     stats["sources_checked"] = len(due)
     results = fetch_all(due, fetcher=fetcher, workers=int(ccfg.get("workers", DEFAULT_FETCH_WORKERS)),
                         deadline=float(ccfg.get("source_timeout_seconds", FETCH_DEADLINE)))
-    stats["gnews_resolved"] = _resolve_gnews_links(s, due_cfgs, results, int(ccfg.get("gnews_resolve_per_cycle", 40)),
-                                                   resolver=resolver)
+    stats["gnews_resolved"] = _resolve_gnews_links(s, due_cfgs, results, int(ccfg.get("gnews_resolve_per_cycle", 20)),
+                                                   resolver=resolver, now=now)
     seen = _existing_urls(s, [raw.canonical_url for res in results for raw in res.items if raw.canonical_url])
     for cfg, res in zip(due_cfgs, results):
         row = rows[cfg.key]
