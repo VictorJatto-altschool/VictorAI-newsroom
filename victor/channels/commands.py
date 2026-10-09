@@ -291,11 +291,23 @@ def _after_approve(s: Session, settings: Settings, tg, now: datetime) -> None:
     from ..intelligence.rules import next_slot
     from ..pipeline import _history, publish_approved
 
+    from ..intelligence.rules import limits_ok
+
     st: dict = {}
     publish_approved(s, settings, st, now, channel=tg)
     if st.get("posts_deferred") and not st.get("posts_manual") and not st.get("posts_published"):
-        when = next_slot(now, settings.limits, _history(s, settings, now), settings.automation.get("timezone", "UTC"))
-        tg.notify(f"Approved and queued. Next hand-off at {_local(settings, when)}.")
+        tz = settings.automation.get("timezone", "UTC")
+        hist = _history(s, settings, now)
+        when = next_slot(now, settings.limits, hist, tz)
+        why = {
+            "off_hours_cap": f"the {settings.limits.get('off_hours_max_posts', 3)} posts allowed outside prime hours "
+                             f"({settings.limits.get('prime_hours', {}).get('start')}-{settings.limits.get('prime_hours', {}).get('end')}) are used",
+            "daily_limit": f"today's {settings.limits.get('max_posts_per_day')} posts are used",
+            "hourly_limit": "one post per hour",
+            "min_gap": f"{settings.limits.get('min_gap_minutes')} minutes between posts",
+        }
+        reasons = [why.get(r, r) for r in limits_ok(now, settings.limits, hist, tz)]
+        tg.notify(f"Approved and queued: {'; '.join(reasons) or 'posting limit'}. It will be handed to you at {_local(settings, when)}.")
 
 
 def clear_chat(s: Session, settings: Settings, tg, now: datetime | None = None, keep_handoffs: bool = True) -> int:

@@ -89,6 +89,20 @@ def next_prime_start(now_utc: datetime, limits: dict[str, Any], tz_name: str) ->
     return candidate.astimezone(timezone.utc)
 
 
+def last_prime_start(now_utc: datetime, limits: dict[str, Any], tz_name: str) -> datetime | None:
+    """The most recent moment prime hours began (today's start, or yesterday's if today's is still ahead)."""
+    ph = _prime(limits)
+    if not ph:
+        return None
+    tz = ZoneInfo(tz_name)
+    local = now_utc.astimezone(tz)
+    start = _parse_hhmm(ph[0])
+    candidate = local.replace(hour=start.hour, minute=start.minute, second=0, microsecond=0)
+    if candidate > local:
+        candidate -= timedelta(days=1)
+    return candidate.astimezone(timezone.utc)
+
+
 def next_slot(now_utc: datetime, limits: dict[str, Any], hist: PostingHistory, tz_name: str = "UTC") -> datetime:
     """Earliest moment the limits allow another post. `now_utc` itself when they allow one now."""
     posted = sorted(hist.posted_at)

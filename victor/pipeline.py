@@ -700,8 +700,16 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
     local = now.astimezone(tz)
     night = in_window(local, settings.overnight["window_start"], settings.overnight["window_end"])
     # Stale approvals expire: the next slot belongs to what is trending now, never to this morning's story.
+    # An approval that was only waiting for prime hours gets its time from the moment prime hours began.
     ttl = timedelta(minutes=float(settings.limits.get("approval_ttl_minutes", 120)))
+    tz_name = settings.automation.get("timezone", "UTC")
+    from .intelligence.rules import last_prime_start
+
+    prime_began = last_prime_start(now, settings.limits, tz_name)
     for stale in s.scalars(select(Draft).where(Draft.status.in_(("approved", "approved_night")), Draft.decided_at < now - ttl)).all():
+        reference = max(_aware(stale.decided_at), prime_began) if prime_began else _aware(stale.decided_at)
+        if now - reference < ttl:
+            continue
         stale.status = "expired"
         if stale.channel_ref and hasattr(channel, "delete_message"):
             channel.delete_message(stale.channel_ref)
