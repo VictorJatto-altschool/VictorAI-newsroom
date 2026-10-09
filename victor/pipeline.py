@@ -855,6 +855,7 @@ def _run_cycle(settings, now, stats, timer, channel, provider, publisher, check_
             with timer("publish"):
                 publish_approved(s, settings, stats, now, publisher=publisher, channel=channel)
                 stats["digest_sent"] = maybe_send_digest(s, settings, channel, now)
+            run.ok = True  # before the dashboard snapshot, so the page shows the cycle as ok
             if settings.raw.get("dashboard", {}).get("enabled", True) and overrides.get("dashboard", True):
                 from .dashboard import write_dashboard
 
@@ -862,7 +863,6 @@ def _run_cycle(settings, now, stats, timer, channel, provider, publisher, check_
                     write_dashboard(s, settings, now)
             with timer("commands"):  # pick up anything that arrived during the cycle
                 stats["commands_handled"] += _commands(s, settings, channel, now, provider)
-            run.ok = True
         except Exception as e:  # noqa: BLE001
             run.error = f"{type(e).__name__}: {e}"[:1000]
             log.exception("run failed")
