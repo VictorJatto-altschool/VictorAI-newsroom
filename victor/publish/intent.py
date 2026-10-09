@@ -34,6 +34,7 @@ class ManualPublisher:
         self.draft_id = draft_id
         self.message_ref: str | None = None  # the draft card to transform in place
         self.footer: str = ""  # e.g. "Next slot opens at 14:30", set by the pipeline
+        self.take_hint: str = ""  # a suggested line of the owner's own take, offered as a Copy button
 
     def publish(self, req: PublishRequest) -> PublishResult:
         url = intent_url(req.text, req.quote_url)
@@ -45,9 +46,13 @@ class ManualPublisher:
             lines += ["", "Media is in the next message: save it and attach it in the composer."]
         if req.reply_text:
             lines += ["", "After posting, paste this as the first reply:", req.reply_text]
+        if self.take_hint:
+            lines += ["", "Your take (copy, change a few words, paste it as the last line in the composer):", self.take_hint]
         if self.footer:
             lines += ["", self.footer]
         buttons = [[{"text": "Open in X", "url": url}]]
+        if self.take_hint:
+            buttons.append([{"text": "Copy my take", "copy_text": {"text": self.take_hint[:256]}}])
         if d:
             buttons.append([{"text": "Posted", "callback_data": f"posted:{d}"}, {"text": "Skip", "callback_data": f"skip:{d}"}])
         ref = None

@@ -43,6 +43,7 @@ def test_every_trending_story_is_drafted_and_sent(fresh_db, now):
     settings = _settings()
     settings.raw["publishing"]["prepare_media"] = False
     settings.raw["limits"]["max_drafts_per_run"] = 0  # uncapped for this test: every qualifying story goes out
+    settings.raw["limits"]["card_every_minutes"] = 0
     tg = FakeTelegramIntent()
     stats = run_once(settings, now, fetcher=busy_fetcher(now), provider=MockProvider(), channel=tg,
                      publisher=MockPublisher(), check_links=False)
@@ -55,6 +56,7 @@ def test_per_cycle_cap_takes_the_strongest_first_and_keeps_the_rest(fresh_db, no
     settings = _settings()
     settings.raw["publishing"]["prepare_media"] = False
     settings.raw["limits"]["max_drafts_per_run"] = 6
+    settings.raw["limits"]["card_every_minutes"] = 0
     stats = run_once(settings, now, fetcher=busy_fetcher(now), provider=MockProvider(), channel=FakeTelegramIntent(),
                      publisher=MockPublisher(), check_links=False)
     assert stats["drafts_made"] == 6
@@ -67,6 +69,7 @@ def test_manual_handoffs_are_not_throttled(fresh_db, now):
     settings = _settings()
     settings.raw["publishing"]["prepare_media"] = False
     settings.raw["limits"]["max_drafts_per_run"] = 0
+    settings.raw["limits"]["card_every_minutes"] = 0
     settings.raw["limits"]["apply_to_manual"] = False
     tg = FakeTelegramIntent()
     run_once(settings, now, fetcher=busy_fetcher(now), provider=MockProvider(), channel=tg, publisher=MockPublisher(), check_links=False)

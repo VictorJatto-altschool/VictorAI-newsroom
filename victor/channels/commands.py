@@ -37,7 +37,7 @@ HELP = """Commands:
 /people - one-tap X searches for accounts in the niche to follow, plus the follow-back routine
 /connect [topic] - a fresh community post inviting people in the niche to introduce themselves and connect; post it any time
 /clearchat - delete every bot message except ready posts waiting for your Posted tap
-/story <link> [angle] - draft a story you found yourself; an X post link is quoted so its video plays
+/story <link> [angle] - a story you found yourself becomes a ready post at once; an X post link is quoted so its video plays
 Reply to a draft card with new text to edit it. Buttons: Approve, Approve for night, Rewrite, Reject."""
 
 
@@ -255,7 +255,10 @@ def send_reminders(s: Session, settings: Settings, tg, now: datetime | None = No
         waiting = s.scalar(select(func.count(Post.id)).where(Post.status == "manual", Post.created_at >= now - timedelta(hours=2)))
         last = get_state(s, "reminder_slot_at", "")
         recently = bool(last) and (now - datetime.fromisoformat(last)) < timedelta(minutes=int(cfg.get("slot_every_minutes", 60)))
-        if not waiting and not recently and next_slot(now, settings.limits, _history(s, settings, now), tz.key) <= now:
+        every = int(settings.limits.get("card_every_minutes", 0) or 0)
+        last_card = get_state(s, "last_card_at", "")
+        card_due = not (every and last_card and (now - datetime.fromisoformat(last_card)).total_seconds() < every * 60)
+        if not waiting and not recently and card_due and next_slot(now, settings.limits, _history(s, settings, now), tz.key) <= now:
             top = s.scalars(select(Story).where(Story.last_updated_at >= now - timedelta(hours=3), Story.status == "discovered",
                                                 Story.classification.in_(("breaking", "hot", "trending")))
                             .order_by(Story.score.desc()).limit(1)).first()
@@ -264,6 +267,7 @@ def send_reminders(s: Session, settings: Settings, tg, now: datetime | None = No
                 if d is not None:
                     tg.notify(f"Slot open now. Strongest story of the hour is above (card #{d.id}): approve it to post.")
                     set_state(s, "reminder_slot_at", now.isoformat())
+                    set_state(s, "last_card_at", now.isoformat())
                     sent.append("slot")
 
     # 2. Daily reply-habit nudge.
@@ -451,7 +455,8 @@ def clear_chat(s: Session, settings: Settings, tg, now: datetime | None = None, 
     now = now or _utcnow()
     keep: set[str] = set()
     if keep_handoffs:
-        keep = {d.channel_ref for d in s.scalars(select(Draft).where(Draft.status == "handed_off", Draft.channel_ref.isnot(None))).all()}
+        keep = {d.channel_ref for d in s.scalars(select(Draft).where(Draft.status.in_(("handed_off", "approved", "approved_night")),
+                                                                 Draft.channel_ref.isnot(None))).all()}
     rows = s.scalars(select(BotMessage).where(BotMessage.deleted.is_(False), BotMessage.created_at >= now - timedelta(hours=47))).all()
     n = 0
     for m in rows:
@@ -491,7 +496,8 @@ def expire_cards(s: Session, settings: Settings, tg, now: datetime | None = None
     # Sweep every other bot message older than the TTL too (prompts, notices, media), except ready posts.
     from ..models import BotMessage
 
-    keep = {d.channel_ref for d in s.scalars(select(Draft).where(Draft.status == "handed_off", Draft.channel_ref.isnot(None))).all()}
+    keep = {d.channel_ref for d in s.scalars(select(Draft).where(Draft.status.in_(("handed_off", "approved", "approved_night")),
+                                                                 Draft.channel_ref.isnot(None))).all()}
     for m in s.scalars(select(BotMessage).where(BotMessage.deleted.is_(False), BotMessage.created_at < cutoff,
                                                 BotMessage.created_at >= now - timedelta(hours=47))).all():
         if m.message_id in keep:
@@ -769,6 +775,14 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
             d = draft_one(s, settings, story, now, channel=tg, official_only_quote=False)
             if d is None:
                 tg.notify("Read the link but could not draft it (AI provider failed). Try again.")
+            else:
+                # A story you sent yourself is already your decision: the card becomes the ready post at once.
+                d.status, d.decided_at = "approved", now
+                s.flush()
+                from ..pipeline import event
+
+                event(s, "draft_approved", "draft", d.id, by="story_command")
+                _after_approve(s, settings, tg, now)
     else:
         tg.notify("Unknown command. /help")
 

@@ -81,4 +81,4 @@ def test_limits(settings):
     h = PostingHistory(posted_at=[now - timedelta(minutes=10)])
     assert "min_gap" in limits_ok(now, settings.limits, h)
     h = PostingHistory(posted_at=[now - timedelta(hours=i) for i in range(1, 14)])
-    assert "daily_limit" in limits_ok(now, settings.limits, h)
+    assert "daily_limit" in limits_ok(now, {**settings.limits, "max_posts_per_day": 12}, h)

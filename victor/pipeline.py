@@ -452,10 +452,17 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
     ).all()
     made: list[Draft] = []
     limit = int(settings.limits.get("max_drafts_per_run", 0) or 0)  # 0 = unlimited: the news sets the pace
+    every = int(settings.limits.get("card_every_minutes", 0) or 0)
+    last_card = get_state(s, "last_card_at", "")
+    if every and last_card and (now - datetime.fromisoformat(last_card)).total_seconds() < every * 60:
+        stats.update(drafts_made=0, drafts_failed=0, drafts_waiting=True)
+        return made  # the format is one card every N minutes; the strongest story is picked when the next slot comes
     recent_openers = [_opener(d.text) for d in s.scalars(select(Draft).order_by(Draft.id.desc()).limit(10)).all()]
     stats.update(drafts_made=0, drafts_failed=0)
     for st in eligible:
         if limit and len(made) >= limit:
+            break
+        if every and made:
             break
         if st.id in hist.story_ids_recent:
             st.status = "skipped"
@@ -507,6 +514,7 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
         )
         draft.channel_ref = channel.send_draft(card)
         made.append(draft)
+        set_state(s, "last_card_at", now.isoformat())
         stats["drafts_made"] += 1
     return made
 
@@ -796,6 +804,7 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
         if manual:
             publisher.draft_id = d.id
             publisher.message_ref = d.channel_ref  # transform the card in place instead of adding a message
+            publisher.take_hint = "" if (d.take or "").strip() else (d.suggested_take or "").strip()
             if enforce:
                 from .intelligence.rules import next_slot
 

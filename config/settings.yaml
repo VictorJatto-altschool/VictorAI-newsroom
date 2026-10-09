@@ -15,16 +15,16 @@ overnight_rule:
   blocked_keywords: [lawsuit, sues, layoff, layoffs, fired, breach, hack, hacked, exploit, allegation, alleged, rumor, rumour, leak, leaked, election, senate, congress, president, minister, parliament, war, strike]
 
 limits:
-  max_posts_per_day: 12
-  max_posts_per_hour: 1
-  min_gap_minutes: 90           # 12 a day across 24 hours = one every two hours, give or take
+  max_posts_per_day: 48
+  max_posts_per_hour: 2
+  min_gap_minutes: 30           # the format: one ranking post every 30 minutes, round the clock
   story_cooldown_days: 7
   entity_cooldown_days: 3
-  max_drafts_per_run: 6        # highest-scoring first; the bar below keeps the feed to strong stories
-  prime_hours: {start: "13:00", end: "01:00"}   # when Premium users in the US and Europe are online (local time)
-  off_hours_max_posts: 3       # at most this many of the day's posts outside prime hours
+  max_drafts_per_run: 1        # one card per cycle: the strongest story trending right now
+  card_every_minutes: 30       # and no sooner than this after the last card the newsroom sent on its own
+  # prime_hours / off_hours_max_posts: off. The user asked for the same rhythm all day.
   approval_ttl_minutes: 120    # an approval not handed off within this long expires: the next slot goes to what is trending now
-  apply_to_manual: true        # Approve past the cap queues the post; it is handed to you at the next free slot
+  apply_to_manual: false       # Approve turns the card into the ready post at once; nothing is queued or deferred
 
 scoring:
   weights:
@@ -85,7 +85,7 @@ publishing:
   x_username: SI4blog_
   # X API pay-per-use (docs.x.com, Oct 2026): post $0.015, post containing a URL $0.200, quote via id $0.015.
   link_in_post: false          # reach first: the post stands alone, the source link goes in the first reply
-  require_take: true           # Approve first asks for one line of your own take; it goes into the post (X Original Content rules)
+  require_take: false          # Approve is one tap. The suggested take stays on the ready post as a Copy button to paste in the composer
   upload_public_domain_video: false  # re-uploading footage, even public domain, reads as aggregation; link or quote instead
   render_when_link_preview: false  # false = skip the rendered card when the link already brings a picture (real media still wins)
   api_reply: plain             # plain = "Source: <publisher>" with no URL ($0.015) | link = full URL ($0.200) | none

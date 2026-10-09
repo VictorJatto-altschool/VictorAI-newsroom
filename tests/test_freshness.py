@@ -32,6 +32,7 @@ def test_stale_approval_expires_and_strongest_goes_first(fresh_db, now):
     settings = _settings()
     settings.raw["publishing"]["prepare_media"] = False
     settings.raw["limits"]["max_drafts_per_run"] = 0
+    settings.raw["limits"]["card_every_minutes"] = 0
     tg = FakeTelegramAll()
     run_once(settings, now, fetcher=busy_fetcher(now), provider=MockProvider(), channel=tg, publisher=MockPublisher(), check_links=False)
     later = now + timedelta(hours=5)  # 18:00 Lagos: well inside prime hours, so the 2-hour approval TTL applies plainly
@@ -53,6 +54,7 @@ def test_next_command_drafts_the_strongest_fresh_story(fresh_db, now):
     settings = _settings()
     settings.raw["publishing"]["prepare_media"] = False
     settings.raw["limits"]["max_drafts_per_run"] = 2  # leaves undrafted strong stories for /next to pick
+    settings.raw["limits"]["card_every_minutes"] = 0
     tg = FakeTelegramAll()
     run_once(settings, now, fetcher=busy_fetcher(now), provider=MockProvider(), channel=tg, publisher=MockPublisher(), check_links=False)
     before = len([m for m in tg.sent if m.startswith("DRAFT#")])

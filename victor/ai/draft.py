@@ -179,9 +179,11 @@ def run_checks(text: str, sources: list[SourceView], cfg: dict[str, Any], check_
     nums = [n for n in _NUM_RE.findall(text) if len(n.strip(",.")) >= 2]
     missing = [n for n in nums if n.strip(",.") not in blob and n.replace(",", "").strip(".") not in blob.replace(",", "")]
     results["numbers_in_sources"] = {"ok": not missing, "missing": missing}
-    banned = ["groundbreaking", "game-changer", "game changer", "revolutionary", "unleash", "unprecedented", "mind-blowing",
-              "insane", "the future is here", "in a move that", "in a world where", "it's official", "big news:", "thoughts?",
-              "agree?", "rt if"]
+    banned = ["groundbreaking", "game-changer", "game changer", "game-changing", "revolutionary", "unleash", "unprecedented",
+              "mind-blowing", "insane", "the future is here", "in a move that", "in a world where", "it's official", "big news:",
+              "thoughts?", "agree?", "rt if", "let that sink in", "read that again", "here's the crazy part",
+              "this changes everything", "that's just the beginning", "implications are profound", "buckle up",
+              "what do you think?"]
     hits = [b for b in banned if b in text.lower()]
     results["banned_words"] = {"ok": not hits, "hits": hits}
     results["not_empty"] = {"ok": len(text.strip()) > 20}
