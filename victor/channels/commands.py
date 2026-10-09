@@ -239,7 +239,7 @@ def new_version(s: Session, settings: Settings, old: Draft, text: str, why: str,
     checks = run_checks(text, views, settings.drafting, check_links=check_links)
     d = Draft(
         story=old.story, text=text, reply_text=old.reply_text, why=why, reason=reason, provider=provider, model=model,
-        suggested_take=old.suggested_take or "",
+        suggested_take=old.suggested_take or "", created_at=now,
         source_item_ids=old.source_item_ids, media=old.media, checks=checks, checks_passed=checks["passed"],
         route="review", status="pending", version=old.version + 1, dev_mode=settings.env.dev_mode,
     )
