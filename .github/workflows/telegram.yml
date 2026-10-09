@@ -1,7 +1,8 @@
 name: telegram
 
-# Always-on button handling in the cloud. A job may run for up to 6 hours, so one starts every 5 hours,
-# polls Telegram for 5h50m, and the next one replaces it. Approvals, rewrites and /commands answer in seconds.
+# The always-on newsroom in the cloud. One job runs for up to ~6 hours: a collection cycle every 15 minutes
+# and Telegram buttons answered within seconds in between. Before it ends it launches its successor, so the
+# chain does not depend on GitHub's cron, which can be hours late on a new repository. The cron is a backup.
 
 on:
   schedule:
@@ -11,6 +12,10 @@ on:
 concurrency:
   group: telegram-poller
   cancel-in-progress: true
+
+permissions:
+  actions: write             # to launch the next job in the chain
+  models: read
 
 jobs:
   poll:
@@ -29,8 +34,6 @@ jobs:
       AI_MODEL: ${{ secrets.AI_MODEL || 'openai/gpt-4o-mini' }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-    permissions:
-      models: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -47,4 +50,11 @@ jobs:
               v = os.environ.get(k, "")
               print(f"{k:<20} {'set (' + str(len(v)) + ' chars)' if v.strip() else 'EMPTY'}")
           PY
-      - run: python -m victor telegram --max-minutes 350 --quiet
+      - name: Newsroom loop (cycle every 15 min, buttons answered in between)
+        run: python -m victor loop --minutes 15 --max-minutes 340
+
+      - name: Launch the next job in the chain
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run telegram.yml --ref main

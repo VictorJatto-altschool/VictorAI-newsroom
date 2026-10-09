@@ -2,7 +2,7 @@ name: newsroom
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # GitHub may delay scheduled runs by several minutes; public repo, so minutes are free
+    - cron: "17 * * * *"     # hourly backup only: the always-on job in telegram.yml runs the 15-minute cycles
   workflow_dispatch:
   push:
     branches: [main]

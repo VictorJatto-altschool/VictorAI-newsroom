@@ -759,6 +759,42 @@ def run_once(settings: Settings, now: datetime | None = None, **overrides: Any) 
     provider = overrides.get("provider") or pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
     publisher = overrides.get("publisher") or _publisher(settings)
     check_links = overrides.get("check_links", True)
+    if not overrides.get("no_lock") and not _acquire_cycle_lock(now):
+        return {"skipped": "another cycle is running", "dev_mode": settings.env.dev_mode}
+    try:
+        return _run_cycle(settings, now, stats, timer, channel, provider, publisher, check_links, overrides)
+    finally:
+        if not overrides.get("no_lock"):
+            _release_cycle_lock()
+
+
+CYCLE_LOCK_MINUTES = 6
+
+
+def _acquire_cycle_lock(now: datetime) -> bool:
+    """Two cycles must never overlap (the loop job and the backup cron share one database)."""
+    with session() as s:
+        row = s.get(State, "cycle_lock")
+        if row and row.value:
+            try:
+                held_since = datetime.fromisoformat(row.value)
+            except ValueError:
+                held_since = None
+            if held_since and now - held_since < timedelta(minutes=CYCLE_LOCK_MINUTES):
+                return False
+        set_state(s, "cycle_lock", now.isoformat())
+    return True
+
+
+def _release_cycle_lock() -> None:
+    try:
+        with session() as s:
+            set_state(s, "cycle_lock", "")
+    except Exception:  # noqa: BLE001  the lock expires on its own after CYCLE_LOCK_MINUTES anyway
+        log.warning("could not release cycle lock")
+
+
+def _run_cycle(settings, now, stats, timer, channel, provider, publisher, check_links, overrides) -> dict[str, Any]:
     with session() as s:
         run = Run(started_at=now)
         s.add(run)

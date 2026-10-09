@@ -191,19 +191,26 @@ def cmd_loop(args):
     settings = _setup(args)
     tg = TelegramChannel(settings.env.telegram_bot_token, settings.env.telegram_chat_id) if settings.env.has_telegram else None
     provider = pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
-    print(f"loop: cycle every {args.minutes} min; Telegram {'on' if tg else 'off'}; Ctrl+C to stop")
-    while True:
+    stop_at = time.time() + args.max_minutes * 60 if args.max_minutes else None
+    print(f"loop: cycle every {args.minutes} min; Telegram {'on' if tg else 'off'}"
+          f"{f'; stops after {args.max_minutes} min' if stop_at else ''}; Ctrl+C to stop", flush=True)
+    while stop_at is None or time.time() < stop_at:
         try:
             stats = run_once(settings)
             print(f"{utcnow():%H:%M} cycle ok: {stats.get('items_new', 0)} new items, {stats.get('drafts_made', 0)} drafts, "
-                  f"{stats.get('posts_published', 0)} published, {stats.get('posts_mock', 0)} simulated")
+                  f"{stats.get('posts_manual', 0)} handed off, {stats.get('posts_published', 0)} published"
+                  + (" (skipped: another cycle was running)" if stats.get("skipped") else ""), flush=True)
         except Exception as e:  # noqa: BLE001
-            print(f"{utcnow():%H:%M} cycle FAILED: {type(e).__name__}: {e}")
+            print(f"{utcnow():%H:%M} cycle FAILED: {type(e).__name__}: {e}", flush=True)
         deadline = time.time() + args.minutes * 60
-        while time.time() < deadline:
+        while time.time() < deadline and (stop_at is None or time.time() < stop_at):
             if tg:
-                with session() as s:
-                    process_updates(s, settings, tg, provider=provider)
+                try:
+                    with session() as s:
+                        process_updates(s, settings, tg, provider=provider)
+                except Exception as e:  # noqa: BLE001
+                    print(f"poll error: {type(e).__name__}: {e}", flush=True)
+                    time.sleep(5)
             time.sleep(3)
 
 
@@ -327,6 +334,7 @@ def main(argv=None):
     sv.set_defaults(fn=cmd_serve)
     lp = sub.add_parser("loop", help="run cycles continuously while the laptop is on")
     lp.add_argument("--minutes", type=int, default=20)
+    lp.add_argument("--max-minutes", type=int, default=0, help="exit after this long (0 = run until stopped)")
     lp.set_defaults(fn=cmd_loop)
     rd = sub.add_parser("render", help="render the card/clip for a draft")
     rd.add_argument("draft_id", type=int)
