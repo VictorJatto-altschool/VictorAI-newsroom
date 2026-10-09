@@ -14,6 +14,9 @@ class MockProvider:
             title = _between(user, "TITLE:", "\n") or "Untitled"
             return json.dumps({"posts": [f"[DEV MODE] {title[:80]}", "Fact one from the sources.", "Fact two from the sources.",
                                          "Why it matters: pending real provider. What would you do with it?"]})
+        if user.startswith("REPLY REQUEST"):
+            n = len(re.findall(r"^STORY \d+$", user, re.M))
+            return json.dumps({"replies": [f"[DEV MODE] Reply {i + 1}: a fact from the sources. What would change your mind?" for i in range(n)]})
         if user.startswith("OPERATOR NOTE:"):
             note = _between(user, "OPERATOR NOTE:", "--- END NOTE")
             post = f"[DEV MODE] From the desk: {note[:180]}\n\nTakeaway: pending real AI provider."

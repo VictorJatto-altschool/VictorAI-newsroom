@@ -33,6 +33,8 @@ HELP = """Commands:
 /digest - weekly summary now
 /next - when the next slot opens, and the strongest story trending right now (drafted on the spot if needed)
 /thread [card number] [parts] - a ready-to-post thread on that card's story, or on the strongest story of the day
+/engage [n] - the strongest stories of the day with a reply drafted for each, to post under the accounts that broke them
+/people - one-tap X searches for accounts in the niche to follow, plus the follow-back routine
 /clearchat - delete every bot message except ready posts waiting for your Posted tap
 /story <link> [angle] - draft a story you found yourself; an X post link is quoted so its video plays
 Reply to a draft card with new text to edit it. Buttons: Approve, Approve for night, Rewrite, Reject."""
@@ -266,9 +268,13 @@ def send_reminders(s: Session, settings: Settings, tg, now: datetime | None = No
     # 2. Daily reply-habit nudge.
     at = str(cfg.get("replies_at", "13:00"))
     if local.strftime("%H:%M") >= at and get_state(s, "reminder_replies_day", "") != local.strftime("%Y-%m-%d"):
-        tg.notify("Reply window: 20 replies under the big accounts in the niche today. Two lines, a fact or a position, no links. "
-                  "That is where followers come from.")
         set_state(s, "reminder_replies_day", local.strftime("%Y-%m-%d"))
+        try:
+            send_engage(s, settings, tg, now, n=5)
+        except Exception as e:  # noqa: BLE001
+            log.warning("engage in reminder failed: %s", e)
+        tg.notify("Reply window: 20 replies under the big accounts in the niche today. Two lines, a fact or a position, no links. "
+                  "That is where followers come from. /people finds accounts to follow.")
         sent.append("replies")
 
     # 3. Weekly growth numbers.
@@ -280,6 +286,100 @@ def send_reminders(s: Session, settings: Settings, tg, now: datetime | None = No
             set_state(s, "reminder_growth_week", wk)
             sent.append("growth")
     return sent
+
+
+_X_HOSTS = ("x.com", "twitter.com", "mobile.twitter.com")
+
+NICHE_SEARCHES = [
+    ("AI news", "AI news"), ("machine learning", "machine learning"), ("robotics", "robotics"),
+    ("space tech", "space technology"), ("science news", "science news"), ("tech innovation", "tech innovation"),
+    ("AI founders", "AI startup founder"), ("chips", "semiconductors AI chips"),
+]
+
+
+def _host(url: str) -> str:
+    return url.split("/")[2].lower().removeprefix("www.") if "://" in (url or "") else ""
+
+
+def _reply_target(story: Story) -> str:
+    """The post to reply under: the official X post when a source is one, otherwise the strongest source link."""
+    items = sorted((i for i in story.items if not i.filtered_reason), key=lambda i: i.source.tier)
+    for i in items:
+        if _host(i.original_url or "") in _X_HOSTS:
+            return i.original_url
+    return (items[0].original_url or "") if items else ""
+
+
+def send_engage(s: Session, settings: Settings, tg, now: datetime, n: int = 5, provider=None) -> int:
+    """/engage: the day's strongest stories, each with the post to reply under and a drafted reply to copy.
+
+    Replies under the accounts that broke the news are where followers in the niche come from. Nothing here is
+    automated on X: the user opens the post, pastes the reply, and follows back by hand."""
+    from ..ai.reply import generate_replies
+    from ..pipeline import event
+
+    stories = s.scalars(select(Story).where(Story.last_updated_at >= now - timedelta(hours=12),
+                                            Story.classification.in_(("breaking", "hot", "trending", "developing")))
+                        .order_by(Story.score.desc()).limit(n * 2)).all()
+    picked: list[tuple[Story, str, list[SourceView]]] = []
+    for st in stories:
+        target = _reply_target(st)
+        items = sorted((i for i in st.items if not i.filtered_reason), key=lambda i: i.source.tier)
+        views = [SourceView(i.id, i.publisher or i.source.name, i.source.tier, i.title, i.summary, i.original_url) for i in items]
+        if target and views:
+            picked.append((st, target, views))
+        if len(picked) >= n:
+            break
+    if not picked:
+        tg.notify("Nothing strong enough in the last 12 hours to reply under. Try again after the next cycle.")
+        return 0
+    provider = provider or pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
+    try:
+        replies = generate_replies(provider, settings.voice, [(st.title, st.category, v) for st, _, v in picked])
+    except Exception as e:  # noqa: BLE001
+        tg.notify(f"Could not draft replies: {type(e).__name__}: {str(e)[:120]}. Here are the posts to reply under anyway.")
+        replies = [""] * len(picked)
+    for k, ((st, target, views), reply) in enumerate(zip(picked, replies), start=1):
+        on_x = _host(target) in _X_HOSTS
+        body = (f"REPLY TARGET {k}/{len(picked)} ({st.score:.0f}): {st.title[:100]}\n\n"
+                + (f"Reply under the official post:\n{target}" if on_x
+                   else f"Find the account that reported this and reply under their post:\n{target}")
+                + (f"\n\nSuggested reply:\n{reply}" if reply else ""))
+        buttons = [[{"text": "Open the post" if on_x else "Open the source", "url": target}]]
+        if reply:
+            buttons.append([{"text": "Copy reply", "copy_text": {"text": reply[:256]}}])
+        if hasattr(tg, "send_with_buttons"):
+            tg.send_with_buttons(body[:4000], buttons)
+        else:
+            tg.notify(body[:4000])
+    tg.notify("Routine after replying: open Notifications, follow back everyone in the niche who followed you, and reply "
+              "to one post from each of them. Small accounts that talk to each other grow together. Never use a tool "
+              "that follows or replies for you: X suspends for that.")
+    event(s, "engage_sent", count=len(picked), by="telegram")
+    return len(picked)
+
+
+def people_message(settings: Settings) -> tuple[str, list[list[dict]]]:
+    """/people: X search links (People tab) for the niche, and the follow routine that X allows."""
+    from urllib.parse import quote
+
+    text = ("Find people in the niche: each button opens X search on the People tab. Follow the ones who post about "
+            "AI, science, tech or space and have talked in the last week.\n\n"
+            "Daily routine (by hand, this is what X allows):\n"
+            "1. Follow 15 to 20 accounts from these searches.\n"
+            "2. Reply to one post from each with a fact or a question; /engage drafts replies for the big stories.\n"
+            "3. Follow back everyone in the niche who follows you, same day.\n"
+            "4. Keep follows under 50 a day and never follow then unfollow in bulk: X treats that as spam.")
+    buttons: list[list[dict]] = []
+    row: list[dict] = []
+    for label, q in NICHE_SEARCHES:
+        row.append({"text": label, "url": f"https://x.com/search?q={quote(q)}&f=user"})
+        if len(row) == 2:
+            buttons.append(row); row = []
+    if row:
+        buttons.append(row)
+    buttons.append([{"text": "Latest posts: AI news", "url": "https://x.com/search?q=" + quote("AI news") + "&f=live"}])
+    return text, buttons
 
 
 def _local(settings: Settings, dt: datetime) -> str:
@@ -579,6 +679,15 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
         tg.notify(f"Cleared {n} messages. Ready posts waiting for your Posted tap were kept.")
     elif cmd == "/thread":
         send_thread(s, settings, tg, now, arg)
+    elif cmd == "/engage":
+        n = int(arg.split()[0]) if arg.split() and arg.split()[0].isdigit() else 5
+        send_engage(s, settings, tg, now, n=max(1, min(10, n)))
+    elif cmd == "/people":
+        text, buttons = people_message(settings)
+        if hasattr(tg, "send_with_buttons"):
+            tg.send_with_buttons(text, buttons)
+        else:
+            tg.notify(text)
     elif cmd == "/next":
         from ..intelligence.rules import next_slot
         from ..pipeline import _history, draft_one
