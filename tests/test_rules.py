@@ -28,8 +28,15 @@ def test_paused_blocks_everything(settings):
     assert not d.allowed and d.route == "blocked"
 
 
-def test_failed_checks_block(settings):
-    assert _decide(settings, checks_passed=False).route == "blocked"
+def test_failed_checks_go_to_review_not_block(settings):
+    d = _decide(settings, checks_passed=False)
+    assert d.allowed and d.route == "review" and "checks_failed" in d.reasons
+
+
+def test_entity_cooldown_is_a_tag_not_a_block(settings):
+    h = PostingHistory(entities_recent={"openai"})
+    d = _decide(settings, hist=h, mode="approval")
+    assert d.allowed and d.route == "review" and "entity_cooldown" in d.reasons
 
 
 def test_approval_mode_always_reviews(settings):

@@ -106,9 +106,11 @@ def _handle_callback(s: Session, settings: Settings, tg, cq: dict, now: datetime
             new = rewrite_draft(s, settings, d, now, provider=provider, tg=tg, note=f"The previous version failed these checks: {detail}. Fix them.")
             tg.mark(msg_id, f"Rewritten as #{new.id}" if new else "Rewrite failed, try again")
             return
-        if d.status not in ("pending", "approved", "approved_night"):
+        if d.status not in ("pending", "blocked", "approved", "approved_night"):
             tg.answer_callback(cq["id"], f"Already {d.status}")
             return
+        if d.status == "blocked":
+            d.status = "pending"  # old blocks (entity cooldown) no longer apply; the human decides
         pub = settings.raw.get("publishing", {})
         if pub.get("require_take", False) and not (d.take or "").strip() and pub.get("mode", "intent") == "intent":
             # X's Original Content rules reward your own perspective. One line from you goes into the post.

@@ -92,18 +92,20 @@ def decide(
     if paused:
         return Decision(False, "blocked", ["paused"])
     if story_id in hist.story_ids_recent:
-        return Decision(False, "blocked", ["story_cooldown"])
+        return Decision(False, "blocked", ["story_cooldown"])  # the same story again: a true duplicate
+    # Everything below is a tag for the human to see, never a block. Only the automatic path treats
+    # a failed check or a recently covered company as a reason not to post.
     if {e.lower() for e in story_entities} & hist.entities_recent:
         reasons.append("entity_cooldown")
     if not checks_passed:
         reasons.append("checks_failed")
-    if reasons:
-        return Decision(False, "blocked", reasons)
 
     if mode == "manual":
-        return Decision(True, "review", ["mode_manual"])
+        return Decision(True, "review", reasons + ["mode_manual"])
     if mode != "restricted_autonomous":
-        return Decision(True, "review", ["mode_approval"])
+        return Decision(True, "review", reasons + ["mode_approval"])
+    if reasons:
+        return Decision(True, "review", reasons)
 
     tz = ZoneInfo(auto.get("timezone", "UTC"))
     local = now_utc.astimezone(tz)
