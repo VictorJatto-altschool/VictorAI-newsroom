@@ -15,13 +15,13 @@ overnight_rule:
   blocked_keywords: [lawsuit, sues, layoff, layoffs, fired, breach, hack, hacked, exploit, allegation, alleged, rumor, rumour, leak, leaked, election, senate, congress, president, minister, parliament, war, strike]
 
 limits:
-  max_posts_per_day: 6
-  max_posts_per_hour: 2
-  min_gap_minutes: 45
+  max_posts_per_day: 12
+  max_posts_per_hour: 1
+  min_gap_minutes: 90           # 12 a day across 24 hours = one every two hours, give or take
   story_cooldown_days: 7
   entity_cooldown_days: 3
-  max_drafts_per_run: 12       # highest-scoring first; the rest wait for the next cycle (free AI tiers rate-limit bursts)
-  apply_to_manual: false       # posting limits only bind automatic (API) posting; when you post by hand, you decide
+  max_drafts_per_run: 6        # highest-scoring first; the bar below keeps the feed to strong stories
+  apply_to_manual: true        # Approve past the cap queues the post; it is handed to you at the next free slot
 
 scoring:
   weights:
@@ -71,6 +71,7 @@ filter:
   min_title_chars: 12          # video titles are short ("Introducing GPT-6")
 
 drafting:
+  min_score: 60                # only stories this strong are drafted: official or widely corroborated, fresh, in-niche
   max_chars: 600               # account is X Premium (long posts allowed); 600 keeps posts scannable
   provider_order: [anthropic, gemini, groq, cerebras, mistral, openrouter, compat, mock]   # every configured key is used, in this order, with automatic failover
 

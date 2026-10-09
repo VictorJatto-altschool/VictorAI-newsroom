@@ -406,9 +406,11 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
     paused = get_state(s, "paused", str(settings.automation.get("paused", False))).lower() == "true"
     mode = get_state(s, "mode", settings.automation.get("mode", "approval"))
     night_cap = int(get_state(s, "night_cap", str(settings.overnight["night_cap"])))
+    min_score = float(settings.drafting.get("min_score", 0) or 0)
     eligible = s.scalars(
         select(Story).where(Story.status == "discovered", Story.classification.in_(("breaking", "hot", "trending")),
-                            Story.last_updated_at >= now - ACTIVE_WINDOW).order_by(Story.score.desc())
+                            Story.score >= min_score, Story.last_updated_at >= now - ACTIVE_WINDOW)
+        .order_by(Story.score.desc())
     ).all()
     made: list[Draft] = []
     limit = int(settings.limits.get("max_drafts_per_run", 0) or 0)  # 0 = unlimited: the news sets the pace
