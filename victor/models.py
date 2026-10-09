@@ -138,6 +138,17 @@ class Note(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class BotMessage(Base):
+    """Every message the bot sends, so the chat can be swept or cleared on command."""
+
+    __tablename__ = "bot_messages"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    message_id: Mapped[str] = mapped_column(String(40), index=True)
+    kind: Mapped[str] = mapped_column(String(30), default="message")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class GrowthSnapshot(Base):
     """Manual or synced account numbers. Free X tier cannot read these, so they are typed in."""
 

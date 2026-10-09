@@ -59,6 +59,22 @@ def limits_ok(now_utc: datetime, limits: dict[str, Any], hist: PostingHistory) -
     return problems
 
 
+def next_slot(now_utc: datetime, limits: dict[str, Any], hist: PostingHistory) -> datetime:
+    """Earliest moment the limits allow another post. `now_utc` itself when they allow one now."""
+    posted = sorted(hist.posted_at)
+    candidates = [now_utc]
+    if posted:
+        candidates.append(posted[-1] + timedelta(minutes=float(limits["min_gap_minutes"])))
+        per_hour, per_day = int(limits["max_posts_per_hour"]), int(limits["max_posts_per_day"])
+        last_hour = [t for t in posted if t > now_utc - timedelta(hours=1)]
+        if len(last_hour) >= per_hour:
+            candidates.append(last_hour[-per_hour] + timedelta(hours=1))
+        last_day = [t for t in posted if t > now_utc - timedelta(days=1)]
+        if len(last_day) >= per_day:
+            candidates.append(last_day[-per_day] + timedelta(days=1))
+    return max(candidates)
+
+
 def contains_blocked(text: str, blocked: list[str]) -> str | None:
     low = text.lower()
     for kw in blocked:

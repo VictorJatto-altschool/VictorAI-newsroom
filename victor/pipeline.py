@@ -737,6 +737,13 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
         if manual:
             publisher.draft_id = d.id
             publisher.message_ref = d.channel_ref  # transform the card in place instead of adding a message
+            if enforce:
+                from .intelligence.rules import next_slot
+
+                after = PostingHistory(posted_at=hist.posted_at + [now])
+                nxt = next_slot(now, settings.limits, after)
+                tz = ZoneInfo(settings.automation.get("timezone", "UTC"))
+                publisher.footer = f"Next slot opens at {nxt.astimezone(tz):%H:%M}."
         res = publisher.publish(req)
         post.status, post.remote_id, post.remote_url, post.reply_remote_id, post.error = (
             res.status, res.remote_id, res.remote_url, res.reply_remote_id, res.error)

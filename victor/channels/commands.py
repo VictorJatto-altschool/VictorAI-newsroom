@@ -31,6 +31,8 @@ HELP = """Commands:
 /note <text> - save a tool note for educational posts
 /growth <followers> <verified_impressions_90d> - record numbers from X analytics
 /digest - weekly summary now
+/next - when the next hand-off slot opens and how many posts are queued
+/clearchat - delete every bot message except ready posts waiting for your Posted tap
 /story <link> [angle] - draft a story you found yourself; an X post link is quoted so its video plays
 Reply to a draft card with new text to edit it. Buttons: Approve, Approve for night, Rewrite, Reject."""
 
@@ -132,22 +134,14 @@ def _handle_callback(s: Session, settings: Settings, tg, cq: dict, now: datetime
         event(s, f"draft_{d.status}", "draft", d.id, by="telegram")
         tg.mark(msg_id, "Approved" if action == "approve" else "Approved for night")
         tg.answer_callback(cq["id"], "Approved")
-        from ..pipeline import publish_approved
-
-        st: dict = {}
-        publish_approved(s, settings, st, now, channel=tg)  # manual mode: hands off to the phone right away
-        if st.get("posts_deferred") and not st.get("posts_manual") and not st.get("posts_published"):
-            tg.notify("Approved, but a posting limit is active right now. It will be offered at the next free slot.")
+        _after_approve(s, settings, tg, now)
     elif action == "skiptake":
-        from ..pipeline import publish_approved
-
         set_state(s, "awaiting_take", "")
         if d.status in ("pending", "blocked"):
             d.status, d.decided_at = "approved", now
             event(s, "draft_approved", "draft", d.id, by="telegram", take="skipped")
-            tg.mark(d.channel_ref, "Approved")
-            tg.mark(msg_id, "Posting without a take")
-            publish_approved(s, settings, {}, now, channel=tg)
+            _remove_card(tg, msg_id, "Posting without a take")  # the prompt is done with
+            _after_approve(s, settings, tg, now)
         tg.answer_callback(cq["id"], "Approved")
     elif action == "posted":
         post = s.scalar(select(Post).where(Post.draft_id == d.id).order_by(Post.id.desc()))
@@ -184,6 +178,43 @@ def _handle_callback(s: Session, settings: Settings, tg, cq: dict, now: datetime
         tg.answer_callback(cq["id"])
 
 
+def _local(settings: Settings, dt: datetime) -> str:
+    return dt.astimezone(ZoneInfo(settings.automation.get("timezone", "UTC"))).strftime("%H:%M")
+
+
+def _after_approve(s: Session, settings: Settings, tg, now: datetime) -> None:
+    """Hand the post over now if the limits allow, otherwise say exactly when the next hand-off comes."""
+    from ..intelligence.rules import next_slot
+    from ..pipeline import _history, publish_approved
+
+    st: dict = {}
+    publish_approved(s, settings, st, now, channel=tg)
+    if st.get("posts_deferred") and not st.get("posts_manual") and not st.get("posts_published"):
+        when = next_slot(now, settings.limits, _history(s, settings, now))
+        tg.notify(f"Approved and queued. Next hand-off at {_local(settings, when)}.")
+
+
+def clear_chat(s: Session, settings: Settings, tg, now: datetime | None = None, keep_handoffs: bool = True) -> int:
+    """Delete every message the bot sent in the last 48 hours, except ready posts waiting for a Posted tap."""
+    from ..models import BotMessage
+
+    now = now or _utcnow()
+    keep: set[str] = set()
+    if keep_handoffs:
+        keep = {d.channel_ref for d in s.scalars(select(Draft).where(Draft.status == "handed_off", Draft.channel_ref.isnot(None))).all()}
+    rows = s.scalars(select(BotMessage).where(BotMessage.deleted.is_(False), BotMessage.created_at >= now - timedelta(hours=47))).all()
+    n = 0
+    for m in rows:
+        if m.message_id in keep:
+            continue
+        if hasattr(tg, "delete_message") and tg.delete_message(m.message_id):
+            n += 1
+        m.deleted = True
+    for d in s.scalars(select(Draft).where(Draft.status == "pending")).all():
+        d.status, d.decided_at = "expired", now  # their cards are gone; they return if the story grows
+    return n
+
+
 def _remove_card(tg, message_id: str | None, fallback_label: str) -> None:
     """Delete a card that no longer needs attention; if the channel cannot delete, mark it instead."""
     if hasattr(tg, "delete_message") and tg.delete_message(message_id):
@@ -206,6 +237,18 @@ def expire_cards(s: Session, settings: Settings, tg, now: datetime | None = None
             tg.delete_message(d.channel_ref)
         d.status = "expired"
         d.decided_at = now
+        n += 1
+    # Sweep every other bot message older than the TTL too (prompts, notices, media), except ready posts.
+    from ..models import BotMessage
+
+    keep = {d.channel_ref for d in s.scalars(select(Draft).where(Draft.status == "handed_off", Draft.channel_ref.isnot(None))).all()}
+    for m in s.scalars(select(BotMessage).where(BotMessage.deleted.is_(False), BotMessage.created_at < cutoff,
+                                                BotMessage.created_at >= now - timedelta(hours=47))).all():
+        if m.message_id in keep:
+            continue
+        if hasattr(tg, "delete_message"):
+            tg.delete_message(m.message_id)
+        m.deleted = True
         n += 1
     if n:
         from ..pipeline import event
@@ -294,10 +337,7 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
                 event(s, "take_added", "draft", d.id, by="telegram")
             d.status, d.decided_at = "approved", now
             event(s, "draft_approved", "draft", d.id, by="telegram")
-            tg.mark(d.channel_ref, "Approved")
-            from ..pipeline import publish_approved
-
-            publish_approved(s, settings, {}, now, channel=tg)
+            _after_approve(s, settings, tg, now)
             return
 
     if reply and text and not text.startswith("/"):
@@ -418,6 +458,16 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
             tg.notify(growth_text(s, settings))
     elif cmd == "/digest":
         tg.notify(digest_text(s, settings, now))
+    elif cmd == "/clearchat":
+        n = clear_chat(s, settings, tg, now)
+        tg.notify(f"Cleared {n} messages. Ready posts waiting for your Posted tap were kept.")
+    elif cmd == "/next":
+        from ..intelligence.rules import next_slot
+        from ..pipeline import _history
+
+        when = next_slot(now, settings.limits, _history(s, settings, now))
+        queued = s.scalar(select(func.count(Draft.id)).where(Draft.status.in_(("approved", "approved_night"))))
+        tg.notify(f"Next hand-off slot: {_local(settings, when) if when > now else 'now'}. Queued and approved: {queued}.")
     elif cmd == "/story":
         from ..collect.manual import ingest_url
         from ..pipeline import draft_one

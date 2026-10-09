@@ -13,6 +13,18 @@ log = logging.getLogger(__name__)
 UPDATES_TIMEOUT = 5.0  # getUpdates is a quick poll; a slow Telegram must not hold up collection
 
 
+def _record(message_id: str, kind: str) -> None:
+    """Remember a sent message so /clearchat and the 30-minute sweep can delete it. Never fails the send."""
+    try:
+        from ..db import session
+        from ..models import BotMessage
+
+        with session() as s:
+            s.add(BotMessage(message_id=message_id, kind=kind))
+    except Exception as e:  # noqa: BLE001
+        log.info("could not record bot message %s: %s", message_id, type(e).__name__)
+
+
 def copy_button(text: str, label: str = "Copy suggested take") -> dict:
     """Telegram copies `text` to the clipboard when tapped (Bot API 7.11+). Max 256 characters."""
     return {"text": label, "copy_text": {"text": text[:256]}}
@@ -53,7 +65,10 @@ class TelegramChannel:
         if not data.get("ok"):
             log.warning("telegram %s rejected: %s", method, str(data)[:200])
             return None
-        return data.get("result")
+        result = data.get("result")
+        if method in ("sendMessage", "sendPhoto", "sendVideo", "sendDocument") and isinstance(result, dict):
+            _record(str(result.get("message_id")), method)
+        return result
 
     # ---- outbound
     def send_draft(self, card: DraftCard) -> str | None:
@@ -94,7 +109,9 @@ class TelegramChannel:
         if not data.get("ok"):
             log.warning("telegram %s rejected: %s", method, str(data)[:200])
             return None
-        return str(data["result"]["message_id"])
+        mid = str(data["result"]["message_id"])
+        _record(mid, method)
+        return mid
 
     def delete_message(self, message_id: str | None) -> bool:
         if not message_id:

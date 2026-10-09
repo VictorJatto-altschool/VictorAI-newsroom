@@ -33,6 +33,7 @@ class ManualPublisher:
         self._tg = channel
         self.draft_id = draft_id
         self.message_ref: str | None = None  # the draft card to transform in place
+        self.footer: str = ""  # e.g. "Next slot opens at 14:30", set by the pipeline
 
     def publish(self, req: PublishRequest) -> PublishResult:
         url = intent_url(req.text, req.quote_url)
@@ -44,6 +45,8 @@ class ManualPublisher:
             lines += ["", "Media is in the next message: save it and attach it in the composer."]
         if req.reply_text:
             lines += ["", "After posting, paste this as the first reply:", req.reply_text]
+        if self.footer:
+            lines += ["", self.footer]
         buttons = [[{"text": "Open in X", "url": url}]]
         if d:
             buttons.append([{"text": "Posted", "callback_data": f"posted:{d}"}, {"text": "Skip", "callback_data": f"skip:{d}"}])
