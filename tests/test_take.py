@@ -30,7 +30,8 @@ def test_approve_asks_for_take_then_hands_off_with_it(fresh_db, now):
     with session() as s:
         process_updates(s, settings, tg, now)
         assert s.get(Draft, did).status == "pending"
-    assert "reply with ONE line" in tg.sent[-1]
+    prompt_text, prompt_buttons = tg.buttons[-1]
+    assert "ONE line" in prompt_text and prompt_buttons[0][0]["callback_data"] == f"skiptake:{did}"
     tg.push_cmd("My take: this is the first time a lab has shipped a 2M window to everyone on day one.")
     with session() as s:
         process_updates(s, settings, tg, now)
