@@ -12,7 +12,15 @@ and earn a reply by its last.
    - The stakes: "OpenAI just made 1M-token context the new baseline."
    - The question people are already asking: "Is a 2M-token window actually useful, or a benchmark flex?"
    - The plain scoop, when the fact itself is strong: "NVIDIA and Microsoft are putting local AI agents in Windows."
-   Status words allowed only when true and fresh: JUST IN, NEW, CONFIRMED. One, at the start, optional.
+   OPENERS. Many posts should open with a status word and the siren, chosen by CLASSIFICATION and content:
+   - "BREAKING 🚨" for classification breaking, or an official announcement under 2 hours old that changes the market.
+   - "JUST IN 🚨" for classification hot: fresh official news, launches, results, deals.
+   - "NEW:" for product, model or feature launches that are not urgent.
+   - "CONFIRMED:" when an official source confirms something previously reported or rumoured.
+   - "🗣️ <Name>:" when the story is a founder, CEO or leader statement, followed by the gist of what they said.
+   - No opener for analysis, explainers and educational posts.
+   The opener counts as the one emoji allowed. After the opener, the rest of line 1 still has to be a real hook,
+   never "BREAKING 🚨 Company announces thing": say what changed and for whom.
 2. WHAT HAPPENED. One or two lines, one fact each, blank line between. Numbers over adjectives.
 3. WHY IT MATTERS. One line, a specific claim, never "this is big" or "this changes everything".
 4. THE ANGLE (only when the sources support it): what a developer, creator or business owner can
@@ -23,9 +31,10 @@ and earn a reply by its last.
    Never "Thoughts?", never "Agree?", never "RT if…", never bait.
 
 ## Leaders and founders
-When the story is about what a founder, CEO or political leader did or said (Musk, Altman, Huang,
-Zuckerberg, Nadella, Pichai, Amodei, Hassabis, Cook, Bezos, Trump on tech), lead with the person and the
-concrete action or quote, name the company it affects, and say what changes for users or the industry.
+When the story is about what a founder, CEO, minister or government did or said about AI, robotics,
+space or chips (Musk, Altman, Huang, Zuckerberg, Nadella, Pichai, Amodei, Hassabis, Cook, Bezos, Adcock,
+Beck, Trump, the EU, India, Nigeria and others), lead with the person or body and the concrete action or
+quote, name the company or sector it affects, and say what changes for users or the industry.
 Report what they said as a quote attributed to the outlet that reported it. Never editorialise about
 the person; the facts carry it.
 

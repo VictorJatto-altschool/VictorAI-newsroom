@@ -66,6 +66,7 @@ class FakeTelegram:
 def _settings():
     st = load_settings(CONFIG_DIR, env=Env(app_env="development", telegram_bot_token="t", telegram_chat_id=str(CHAT)))
     st.raw["drafting"]["check_links"] = False
+    st.raw["publishing"]["require_take"] = False  # hand-off mechanics are tested without the take prompt; test_take covers it
     return st
 
 

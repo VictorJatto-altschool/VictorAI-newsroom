@@ -83,6 +83,12 @@ sources:
   - {name: Google News AI emerging, kind: gnews, query: "AI startup (Nigeria OR Kenya OR \"South Africa\" OR India OR Brazil OR UAE OR Singapore) launch OR funding", tier: 4, category: business, interval_minutes: 60}
   - {name: Google News chips,      kind: gnews, query: "(TSMC OR Intel OR AMD OR Qualcomm OR Arm OR Samsung OR Micron) AI chip", tier: 4, category: tech, interval_minutes: 60}
   - {name: Google News AI companies, kind: gnews, query: "(xAI OR Anthropic OR Cohere OR Perplexity OR Runway OR ElevenLabs OR Midjourney OR Cursor OR Databricks OR \"Scale AI\") announces OR launches OR releases", tier: 4, category: ai_tools}
+  # --- What founders, CEOs and governments are saying (statements, interviews, policy) ---
+  - {name: Founders say AI,        kind: gnews, query: "(Altman OR Amodei OR Hassabis OR Huang OR Zuckerberg OR Nadella OR Pichai OR LeCun OR Karpathy OR Brockman) says OR said OR warns OR predicts AI", tier: 4, category: leaders}
+  - {name: Founders say robotics space, kind: gnews, query: "(Musk OR Bezos OR \"Brett Adcock\" OR \"Peter Beck\" OR \"Marc Raibert\" OR \"Jim Fan\") says OR said (robot OR humanoid OR Starship OR Mars OR orbit)", tier: 4, category: leaders}
+  - {name: Founders startups,      kind: gnews, query: "(founder OR CEO) (AI OR robotics OR space) startup announces OR raises OR launches", tier: 4, category: business, interval_minutes: 60}
+  - {name: Governments on AI,      kind: gnews, query: "(White House OR Congress OR EU OR \"European Commission\" OR UK OR China OR India OR Nigeria OR Japan OR UAE) AI (regulation OR law OR ban OR investment OR policy)", tier: 4, category: leaders, interval_minutes: 60}
+  - {name: Governments on space chips, kind: gnews, query: "(government OR president OR minister OR Congress OR parliament) (SpaceX OR NASA OR semiconductor OR Nvidia OR TikTok OR Starlink OR data center)", tier: 4, category: leaders, interval_minutes: 60}
   - {name: Hacker News Front,      kind: hn,    url: "https://hnrss.org/frontpage?points=100",                        tier: 4, category: tech}
   - {name: Hugging Face Trending,  kind: hf,    url: "https://huggingface.co/api/models?sort=trendingScore&direction=-1&limit=20", tier: 4, category: ai_models, interval_minutes: 120}
   - {name: Reddit r/artificial,    kind: reddit, url: "https://www.reddit.com/r/artificial/top/.rss?t=day",           tier: 4, category: ai_models, interval_minutes: 120}

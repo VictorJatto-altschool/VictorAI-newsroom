@@ -410,7 +410,9 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
         items = sorted((i for i in st.items if not i.filtered_reason), key=lambda i: _source_order(i, now))
         views = [SourceView(i.id, i.publisher or i.source.name, i.source.tier, i.title, i.summary, i.original_url) for i in items]
         try:
-            out = generate(provider, settings.voice, st.title, st.category, views, int(settings.drafting.get("max_chars", 280)))
+            out = generate(provider, settings.voice, st.title, st.category, views, int(settings.drafting.get("max_chars", 280)),
+                           classification=st.classification,
+                           age_hours=(now - _aware(st.first_seen_at)).total_seconds() / 3600 if st.first_seen_at else None)
         except Exception as e:  # noqa: BLE001  one bad provider answer must never end the cycle
             stats["drafts_failed"] += 1
             event(s, "draft_failed", "story", st.id, error=str(e)[:300], provider=provider.name)
@@ -680,7 +682,8 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
         link_preview = bool(link) and not pub_cfg.get("render_when_link_preview", False) and _link_has_preview(link)
         if pub_cfg.get("prepare_media", True) and media.get("mode") in ("upload", "render"):
             media = prepare_media(media, d.story.title, d.text, d.story.category, f"@{pub_cfg.get('x_username', '')}",
-                                  want_clip=bool(pub_cfg.get("render_clip", True)), allow_render=not link_preview)
+                                  want_clip=bool(pub_cfg.get("render_clip", True)), allow_render=not link_preview,
+                                  allow_video_upload=bool(pub_cfg.get("upload_public_domain_video", False)))
             if media.get("mode") == "link":
                 media["url"] = link
             d.media = media
@@ -690,12 +693,15 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
             reply = _api_reply_text(d, pub_cfg.get("api_reply", "plain"))
             post.cost_usd = est
             spent_today += est
-        elif manual and pub_cfg.get("link_in_post", True):
-            # Posting by hand costs nothing per link, so the video link (else the source link) goes in the post itself.
-            link = _post_link(d.reply_text)
-            if link:
-                text = f"{d.text.rstrip()}\n\n{link}"
-                reply = ""
+        elif manual:
+            if (d.take or "").strip():  # the human's own line is part of the post, above the link
+                text = f"{text.rstrip()}\n\n{d.take.strip()}"
+            if pub_cfg.get("link_in_post", True):
+                # Posting by hand costs nothing per link, so the video link (else the source link) goes in the post itself.
+                link = _post_link(d.reply_text)
+                if link:
+                    text = f"{text.rstrip()}\n\n{link}"
+                    reply = ""
             if media.get("attribution"):  # a CC photo must carry its credit; the credit travels with the post
                 text = f"{text.rstrip()}\n{media['attribution']}"
         req = PublishRequest(idempotency_key=key, text=text, reply_text=reply,

@@ -153,15 +153,21 @@ LEADERS = [
     "Elon Musk", "Donald Trump", "Sam Altman", "Jensen Huang", "Mark Zuckerberg", "Satya Nadella", "Sundar Pichai",
     "Dario Amodei", "Demis Hassabis", "Tim Cook", "Jeff Bezos", "Greg Brockman", "Mira Murati", "Ilya Sutskever",
     "Yann LeCun", "Andrej Karpathy", "Arthur Mensch", "Aravind Srinivas", "Alexandr Wang", "Lisa Su", "Pat Gelsinger",
+    "Brett Adcock", "Peter Beck", "Marc Raibert", "Jim Fan", "Masayoshi Son", "Liang Wenfeng", "Jack Ma", "Robin Li",
+    "Cristiano Amon", "Rene Haas", "Elizabeth Warren", "JD Vance", "Ursula von der Leyen", "Narendra Modi", "Bola Tinubu",
 ]
 _OK_LICENSES = ("public domain", "pd", "cc0", "cc by", "cc-by", "cc by-sa", "cc-by-sa", "attribution")
 
 
 def person_in(text: str) -> str | None:
+    """Whole-word match on the full name; surname alone only when it is long enough to be unambiguous."""
     low = (text or "").lower()
     for name in LEADERS:
+        if re.search(rf"\b{re.escape(name.lower())}\b", low):
+            return name
+    for name in LEADERS:
         surname = name.split()[-1].lower()
-        if name.lower() in low or f" {surname}" in f" {low}":
+        if len(surname) >= 5 and re.search(rf"\b{re.escape(surname)}\b", low):
             return name
     return None
 
@@ -225,7 +231,7 @@ def download_licensed(url: str, name: str, client: httpx.Client | None = None) -
 
 def prepare_media(draft_media: dict, headline: str, post_text: str, category: str, handle: str,
                   want_clip: bool = True, lookup_person=wiki_person_image, lookup_video=None,
-                  allow_render: bool = True) -> dict:
+                  allow_render: bool = True, allow_video_upload: bool = False) -> dict:
     """allow_render=False: the post already has a link with its own preview, so if no real media is found,
     return mode 'link' instead of rendering a card."""
     if lookup_video is None:
@@ -234,7 +240,7 @@ def prepare_media(draft_media: dict, headline: str, post_text: str, category: st
     media = dict(draft_media or {})
     mode = media.get("mode", "render")
     try:
-        if mode in ("render", "upload") and category == "space" and lookup_video is not None:
+        if mode in ("render", "upload") and category == "space" and lookup_video is not None and allow_video_upload:
             vid = lookup_video(headline)  # real NASA footage first: native video beats everything for reach
             if vid:
                 p = download_public_domain_video(vid["url"], headline)

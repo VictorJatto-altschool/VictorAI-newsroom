@@ -80,6 +80,8 @@ publishing:
   x_username: SI4blog_
   # X API pay-per-use (docs.x.com, Oct 2026): post $0.015, post containing a URL $0.200, quote via id $0.015.
   link_in_post: true           # intent (manual) mode: put the video link, or else the source link, inside the post itself
+  require_take: true           # Approve first asks for one line of your own take; it goes into the post (X Original Content rules)
+  upload_public_domain_video: false  # re-uploading footage, even public domain, reads as aggregation; link or quote instead
   render_when_link_preview: false  # false = skip the rendered card when the link already brings a picture (real media still wins)
   api_reply: plain             # plain = "Source: <publisher>" with no URL ($0.015) | link = full URL ($0.200) | none
   daily_budget_usd: 0.25       # API mode refuses to post once today's estimated spend reaches this

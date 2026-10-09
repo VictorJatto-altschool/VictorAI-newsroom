@@ -88,6 +88,7 @@ class Draft(Base):
     reply_text: Mapped[str] = mapped_column(Text, default="")  # first reply: source link
     why: Mapped[str] = mapped_column(Text, default="")
     reason: Mapped[str] = mapped_column(Text, default="")  # why the system chose this story
+    take: Mapped[str] = mapped_column(Text, default="")  # the operator's own line, typed by a human, goes into the post
     provider: Mapped[str] = mapped_column(String(40))
     model: Mapped[str] = mapped_column(String(80), default="")
     source_item_ids: Mapped[list] = mapped_column(JSON, default=list)

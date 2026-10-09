@@ -38,6 +38,7 @@ def init_engine(database_url: str = "") -> None:
 # Columns added after the first release. create_all never alters existing tables, so add them here.
 _ADDED_COLUMNS = {
     "posts": {"cost_usd": "FLOAT DEFAULT 0.0"},
+    "drafts": {"take": "TEXT DEFAULT ''"},
 }
 
 

@@ -66,11 +66,13 @@ def pick_provider(env: Env, order: list[str]) -> AIProvider:
     return MockProvider()
 
 
-def build_user_prompt(title: str, category: str, sources: list[SourceView]) -> str:
+def build_user_prompt(title: str, category: str, sources: list[SourceView], classification: str = "trending",
+                      age_hours: float | None = None) -> str:
     primary = sources[0]
     lines = [
         f"TITLE: {title}",
         f"CATEGORY: {category}",
+        f"CLASSIFICATION: {classification}" + (f" (first seen {age_hours:.1f} h ago)" if age_hours is not None else ""),
         f"PUBLISHER: {primary.publisher}",
         f"SOURCE_COUNT: {len(sources)}",
         "",
@@ -83,9 +85,9 @@ def build_user_prompt(title: str, category: str, sources: list[SourceView]) -> s
 
 
 def generate(provider: AIProvider, voice: str, title: str, category: str, sources: list[SourceView],
-             max_chars: int = 280) -> DraftOutput:
+             max_chars: int = 280, classification: str = "trending", age_hours: float | None = None) -> DraftOutput:
     system = SYSTEM_PREFIX + f"\n\nHARD LIMIT: the post must be under {max_chars} characters including spaces and line breaks.\n\nVOICE GUIDE:\n" + voice
-    user = build_user_prompt(title, category, sources)
+    user = build_user_prompt(title, category, sources, classification, age_hours)
     raw = provider.complete(system, user)
     out = parse_draft_json(raw, provider.name, provider.model)
     for _ in range(2):  # models overshoot; ask for a tighter cut instead of discarding a good draft
@@ -143,7 +145,11 @@ def _link_check(url: str) -> dict[str, Any]:
     try:
         r = httpx.head(url, follow_redirects=True, timeout=LINK_TIMEOUT)
         if r.status_code in (403, 405):  # some CDNs refuse HEAD
-            r = httpx.get(url, follow_redirects=True, timeout=LINK_TIMEOUT)
+            r = httpx.get(url, follow_redirects=True, timeout=LINK_TIMEOUT,
+                          headers={"User-Agent": "Mozilla/5.0 (compatible; VictorNewsroom/0.1)"})
+        if r.status_code in (401, 403, 405, 429, 503):
+            # The site refuses bots, not readers. A human tapping the link in X will get the page.
+            return {"ok": True, "status": r.status_code, "warning": f"site answered {r.status_code} to the bot; link is probably fine"}
         return {"ok": r.status_code < 400, "status": r.status_code}
     except httpx.TimeoutException:
         log.info("link check timed out for %s after %.0fs", url, LINK_TIMEOUT)

@@ -79,7 +79,7 @@ def _authorized(settings: Settings, chat_id: Any) -> bool:
 
 
 def _handle_callback(s: Session, settings: Settings, tg, cq: dict, now: datetime, provider) -> None:
-    from ..pipeline import event
+    from ..pipeline import event, set_state
 
     chat_id = (cq.get("message") or {}).get("chat", {}).get("id") or (cq.get("from") or {}).get("id")
     if not _authorized(settings, chat_id):
@@ -97,11 +97,25 @@ def _handle_callback(s: Session, settings: Settings, tg, cq: dict, now: datetime
     msg_id = str((cq.get("message") or {}).get("message_id", "")) or d.channel_ref
     if action in ("approve", "night"):
         if not d.checks_passed:
-            failed = [k for k, v in d.checks.items() if k != "passed" and not v.get("ok")]
-            tg.answer_callback(cq["id"], f"Blocked: {', '.join(failed)}")
+            failed = [k for k, v in d.checks.items() if k != "passed" and isinstance(v, dict) and not v.get("ok")]
+            detail = "; ".join(f"{k}: {v.get('missing') or v.get('hits') or v.get('value', '')}" for k, v in d.checks.items()
+                               if k in failed and isinstance(v, dict))
+            tg.answer_callback(cq["id"], "Failed a check, rewriting")
+            tg.notify(f"Draft #{d.id} cannot post as written. Failed: {detail or ', '.join(failed)}. "
+                      "Rewriting it now; the new card replaces this one.")
+            new = rewrite_draft(s, settings, d, now, provider=provider, tg=tg, note=f"The previous version failed these checks: {detail}. Fix them.")
+            tg.mark(msg_id, f"Rewritten as #{new.id}" if new else "Rewrite failed, try again")
             return
         if d.status not in ("pending", "approved", "approved_night"):
             tg.answer_callback(cq["id"], f"Already {d.status}")
+            return
+        pub = settings.raw.get("publishing", {})
+        if pub.get("require_take", False) and not (d.take or "").strip() and pub.get("mode", "intent") == "intent":
+            # X's Original Content rules reward your own perspective. One line from you goes into the post.
+            set_state(s, "awaiting_take", str(d.id))
+            tg.answer_callback(cq["id"], "One line from you first")
+            tg.notify(f"Draft #{d.id}: reply with ONE line of your own take (what you think, or why it matters to your audience). "
+                      f"It goes into the post above the link. Send 'skip' to post without it.")
             return
         d.status = "approved" if action == "approve" else "approved_night"
         d.decided_at = now
@@ -212,8 +226,25 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
 
     if not _authorized(settings, m.get("chat", {}).get("id")):
         return
+    _ = (get_state, set_state)
     text = (m.get("text") or "").strip()
     reply = m.get("reply_to_message")
+    awaiting = get_state(s, "awaiting_take", "")
+    if awaiting and text and not text.startswith("/") and not reply:
+        d = s.get(Draft, int(awaiting))
+        set_state(s, "awaiting_take", "")
+        if d and d.status == "pending":
+            if text.lower() != "skip":
+                d.take = text[:280]
+                event(s, "take_added", "draft", d.id, by="telegram")
+            d.status, d.decided_at = "approved", now
+            event(s, "draft_approved", "draft", d.id, by="telegram")
+            tg.mark(d.channel_ref, "Approved")
+            from ..pipeline import publish_approved
+
+            publish_approved(s, settings, {}, now, channel=tg)
+            return
+
     if reply and text and not text.startswith("/"):
         ref = str(reply.get("message_id"))
         if re.match(r"https?://(x|twitter)\.com/\w+/status/\d+", text.strip()):

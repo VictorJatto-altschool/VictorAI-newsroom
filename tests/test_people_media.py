@@ -6,6 +6,8 @@ def test_person_detection():
     assert person_in("Elon Musk receives the National Medal of Science") == "Elon Musk"
     assert person_in("Altman says GPT-6 ships next week") == "Sam Altman"
     assert person_in("NVIDIA ships a new GPU") is None
+    assert person_in("Why it matters: the fan base is small") is None  # 'Ma' and 'Fan' must not match inside other words
+    assert person_in("Jack Ma returns to Alibaba") == "Jack Ma"
 
 
 def test_whitehouse_images_are_public_domain():
