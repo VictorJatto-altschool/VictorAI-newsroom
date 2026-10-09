@@ -120,12 +120,16 @@ def _single_provider(env: Env, name: str) -> AIProvider | None:
 
 
 def build_user_prompt(title: str, category: str, sources: list[SourceView], classification: str = "trending",
-                      age_hours: float | None = None) -> str:
+                      age_hours: float | None = None, recent_openers: list[str] | None = None) -> str:
     primary = sources[0]
     lines = [
         f"TITLE: {title}",
         f"CATEGORY: {category}",
         f"CLASSIFICATION: {classification}" + (f" (first seen {age_hours:.1f} h ago)" if age_hours is not None else ""),
+    ]
+    if recent_openers:
+        lines.append("RECENT POST OPENERS (do not repeat these; choose a different hook type): " + " | ".join(recent_openers))
+    lines += [
         f"PUBLISHER: {primary.publisher}",
         f"SOURCE_COUNT: {len(sources)}",
         "",
@@ -138,9 +142,10 @@ def build_user_prompt(title: str, category: str, sources: list[SourceView], clas
 
 
 def generate(provider: AIProvider, voice: str, title: str, category: str, sources: list[SourceView],
-             max_chars: int = 280, classification: str = "trending", age_hours: float | None = None) -> DraftOutput:
+             max_chars: int = 280, classification: str = "trending", age_hours: float | None = None,
+             recent_openers: list[str] | None = None) -> DraftOutput:
     system = SYSTEM_PREFIX + f"\n\nHARD LIMIT: the post must be under {max_chars} characters including spaces and line breaks.\n\nVOICE GUIDE:\n" + voice
-    user = build_user_prompt(title, category, sources, classification, age_hours)
+    user = build_user_prompt(title, category, sources, classification, age_hours, recent_openers)
     raw = provider.complete(system, user)
     out = parse_draft_json(raw, provider.name, provider.model)
     for _ in range(2):  # models overshoot; ask for a tighter cut instead of discarding a good draft

@@ -372,6 +372,12 @@ def _official_handles(settings: Settings) -> set[str]:
     return {c.x_handle.lstrip("@").lower() for c in settings.sources if c.x_handle}
 
 
+def _opener(text: str) -> str:
+    """The first few words of a post: what the next draft must not reuse."""
+    first = (text or "").strip().splitlines()[0] if (text or "").strip() else ""
+    return " ".join(first.split()[:4])[:40]
+
+
 def _source_order(i: Item, now: datetime) -> tuple:
     """Best tier first; within a tier, written sources before videos, then newest first. Unresolved Google wrappers last."""
     is_video = 1 if i.source.kind == "youtube" or "youtube.com" in i.original_url else 0
@@ -406,6 +412,7 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
     ).all()
     made: list[Draft] = []
     limit = int(settings.limits.get("max_drafts_per_run", 0) or 0)  # 0 = unlimited: the news sets the pace
+    recent_openers = [_opener(d.text) for d in s.scalars(select(Draft).order_by(Draft.id.desc()).limit(10)).all()]
     stats.update(drafts_made=0, drafts_failed=0)
     for st in eligible:
         if limit and len(made) >= limit:
@@ -419,7 +426,9 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
         try:
             out = generate(provider, settings.voice, st.title, st.category, views, int(settings.drafting.get("max_chars", 280)),
                            classification=st.classification,
-                           age_hours=(now - _aware(st.first_seen_at)).total_seconds() / 3600 if st.first_seen_at else None)
+                           age_hours=(now - _aware(st.first_seen_at)).total_seconds() / 3600 if st.first_seen_at else None,
+                           recent_openers=recent_openers)
+            recent_openers = ([_opener(out.text)] + recent_openers)[:10]
         except Exception as e:  # noqa: BLE001  one bad provider answer must never end the cycle
             stats["drafts_failed"] += 1
             event(s, "draft_failed", "story", st.id, error=str(e)[:300], provider=provider.name)
