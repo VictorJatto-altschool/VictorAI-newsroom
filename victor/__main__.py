@@ -212,11 +212,23 @@ def cmd_loop(args):
 
         start_http(int(args.http_port))
     if args.lease:
+        import signal
+
+        def _release_and_exit(signum, frame):
+            # Render sends SIGTERM on every redeploy: hand the lease over at once so the successor does not wait.
+            try:
+                with session() as s:
+                    set_state(s, "loop_lease", "")
+            finally:
+                print("lease released on shutdown", flush=True)
+                raise SystemExit(0)
+
+        signal.signal(signal.SIGTERM, _release_and_exit)
         # Wait out a fresh lease instead of exiting: on a hosted service the process must stay up, and the
         # previous holder (a dying instance, or the laptop) will stop heartbeating within a few minutes.
         while lease_alive():
             print("another newsroom loop holds a fresh lease; waiting for it to let go", flush=True)
-            time.sleep(60)
+            time.sleep(15)
         heartbeat()
     last_beat = time.time()
     stop_at = time.time() + args.max_minutes * 60 if args.max_minutes else None
