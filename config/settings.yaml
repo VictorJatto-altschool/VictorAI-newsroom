@@ -34,8 +34,8 @@ scoring:
   thresholds:
     breaking: 85
     hot: 70
-    trending: 55
-    developing: 40
+    trending: 50
+    developing: 38
   category_weights:            # 0-1, how much the audience cares
     ai_models: 1.0
     ai_tools: 0.9
