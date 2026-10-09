@@ -1,0 +1,29 @@
+# Render blueprint: one free web service running the newsroom loop.
+# Deploy: render.com -> New -> Blueprint -> pick this repo. Then set the secret env vars in the dashboard.
+# Keep it awake with a free uptime pinger (UptimeRobot, 5-minute HTTP check on /health).
+services:
+  - type: web
+    name: victor-newsroom
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: TZ_NAME
+        value: Africa/Lagos
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

@@ -207,10 +207,16 @@ def cmd_loop(args):
         with session() as s:
             set_state(s, "loop_lease", utcnow().isoformat())
 
+    if args.http_port:
+        from .serve import start_http
+
+        start_http(int(args.http_port))
     if args.lease:
-        if lease_alive():
-            print("another newsroom loop is alive (lease fresh); exiting so we never run two", flush=True)
-            return
+        # Wait out a fresh lease instead of exiting: on a hosted service the process must stay up, and the
+        # previous holder (a dying instance, or the laptop) will stop heartbeating within a few minutes.
+        while lease_alive():
+            print("another newsroom loop holds a fresh lease; waiting for it to let go", flush=True)
+            time.sleep(60)
         heartbeat()
     last_beat = time.time()
     stop_at = time.time() + args.max_minutes * 60 if args.max_minutes else None
@@ -369,7 +375,8 @@ def main(argv=None):
     lp = sub.add_parser("loop", help="run cycles continuously while the laptop is on")
     lp.add_argument("--minutes", type=int, default=20)
     lp.add_argument("--max-minutes", type=int, default=0, help="exit after this long (0 = run until stopped)")
-    lp.add_argument("--lease", action="store_true", help="exit immediately if another loop holds a fresh lease in the database")
+    lp.add_argument("--lease", action="store_true", help="wait while another loop holds a fresh lease in the database")
+    lp.add_argument("--http-port", type=int, default=0, help="also serve /health and the dashboard on this port (hosted mode)")
     lp.set_defaults(fn=cmd_loop)
     rd = sub.add_parser("render", help="render the card/clip for a draft")
     rd.add_argument("draft_id", type=int)
