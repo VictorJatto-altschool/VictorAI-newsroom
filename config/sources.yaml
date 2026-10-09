@@ -12,7 +12,7 @@ sources:
   - {name: Meta Newsroom,          kind: rss, x_handle: Meta,           url: https://about.fb.com/feed/,                      tier: 1, category: tech}
   - {name: NASA News,              kind: rss, x_handle: NASA,           url: https://www.nasa.gov/news-release/feed/,         tier: 1, category: space}
   - {name: GitHub Blog,            kind: rss, x_handle: github,         url: https://github.blog/feed/,                       tier: 1, category: ai_tools}
-  - {name: arXiv cs.AI,            kind: rss,                           url: https://rss.arxiv.org/rss/cs.AI,                 tier: 1, category: research, interval_minutes: 180}
+  - {name: arXiv cs.AI,            kind: rss,                           url: https://rss.arxiv.org/rss/cs.AI,                 tier: 2, category: research, interval_minutes: 180}
   # --- Tier 1: official YouTube channels (free RSS, no API key). Videos become reference links in the reply. ---
   - {name: OpenAI YouTube,         kind: youtube, x_handle: OpenAI,         url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCXZCJLdBC09xxGZ6gcdrc6A", tier: 1, category: ai_models, interval_minutes: 60}
   - {name: Anthropic YouTube,      kind: youtube, x_handle: AnthropicAI,    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCrDwWp7EBBv4NwvScIpBDOA", tier: 1, category: ai_models, interval_minutes: 60}

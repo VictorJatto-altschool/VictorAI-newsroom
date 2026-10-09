@@ -39,7 +39,7 @@ scoring:
   category_weights:            # 0-1, how much the audience cares
     ai_models: 1.0
     ai_tools: 0.9
-    research: 0.7
+    research: 0.5                # papers need press pickup before they are news
     product_launch: 0.8
     space: 0.7
     science: 0.5

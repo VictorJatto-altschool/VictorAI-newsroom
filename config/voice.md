@@ -21,6 +21,10 @@ and earn a reply by its last.
    - No opener for analysis, explainers and educational posts.
    The opener counts as the one emoji allowed. After the opener, the rest of line 1 still has to be a real hook,
    never "BREAKING 🚨 Company announces thing": say what changed and for whom.
+   Sirens are rare: "BREAKING 🚨" and "JUST IN 🚨" only when CLASSIFICATION is breaking or hot AND the story was
+   first seen under 6 hours ago. Research papers, tutorials and explainers never get a siren. Most posts open
+   with "NEW:", "🗣️ Name:", or no opener at all. Line 1 is under 100 characters. One fact per line, blank line
+   between lines: never a single paragraph.
 2. WHAT HAPPENED. One or two lines, one fact each, blank line between. Numbers over adjectives.
 3. WHY IT MATTERS. One line, a specific claim, never "this is big" or "this changes everything".
 4. THE ANGLE (only when the sources support it): what a developer, creator or business owner can

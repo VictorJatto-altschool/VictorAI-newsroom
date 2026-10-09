@@ -52,7 +52,13 @@ def clean_post_text(text: str) -> str:
         if ln == "" and (not out or out[-1] == ""):
             continue  # collapse runs of blank lines
         out.append(ln)
-    return "\n".join(out).strip()
+    text = "\n".join(out).strip()
+    # A post written as one long paragraph is unreadable on X and has no hook line: break it at sentences.
+    if "\n" not in text and len(text) > 140:
+        sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(🚨🗣])", text)
+        if len(sentences) > 1:
+            text = "\n\n".join(s.strip() for s in sentences if s.strip())
+    return text
 
 
 def parse_draft_json(raw: str, provider: str, model: str) -> DraftOutput:

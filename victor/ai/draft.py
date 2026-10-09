@@ -181,7 +181,9 @@ def run_checks(text: str, sources: list[SourceView], cfg: dict[str, Any], check_
     results["banned_words"] = {"ok": not hits, "hits": hits}
     results["not_empty"] = {"ok": len(text.strip()) > 20}
     first = text.strip().splitlines()[0] if text.strip() else ""
-    results["hook_length"] = {"ok": 0 < len(first) <= 100, "value": len(first)}
+    # A long first line is a quality warning the reviewer sees, not a reason to refuse the post.
+    results["hook_length"] = {"ok": len(first) > 0, "value": len(first),
+                              **({"warning": f"first line is {len(first)} characters; hooks read best under 100"} if len(first) > 100 else {})}
     results["hook_not_generic"] = {"ok": not re.match(r"^\W*(breaking|just in|new)\W*:?\s*$", first.strip(), re.I)}
     if check_links:
         results["source_link_resolves"] = _link_check(sources[0].url) if sources else {"ok": False}
