@@ -30,6 +30,7 @@ def test_link_with_preview_replaces_rendered_card(fresh_db, now, tmp_path, monke
     monkeypatch.setattr("victor.pipeline._link_has_preview", lambda url, timeout=8.0: True)
     settings = _settings()
     settings.raw["publishing"]["render_clip"] = False
+    settings.raw["publishing"]["link_in_post"] = True
     tg = FakeTelegramIntent()
     media = _approve_first(settings, tg, now)
     assert media["mode"] == "link" and "youtube.com" in media["url"]

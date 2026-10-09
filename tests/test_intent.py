@@ -39,6 +39,7 @@ def test_intent_url_carries_text_and_quote():
 def test_approve_hands_off_to_phone_and_posted_confirms(fresh_db, now):
     settings = _settings()
     settings.raw["publishing"]["prepare_media"] = False
+    settings.raw["publishing"]["link_in_post"] = True  # this test covers the link-in-post variant
     tg = FakeTelegramIntent()
     run_once(settings, now, fetcher=make_fetcher(now), provider=MockProvider(), channel=tg, publisher=MockPublisher(), check_links=False)
     with session() as s:

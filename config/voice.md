@@ -30,7 +30,7 @@ and earn a reply by its last.
 4. THE ANGLE (only when the sources support it): what a developer, creator or business owner can
    do with this today, or what it does not do yet. If the sources give nothing, leave it out.
    Never invent availability, prices, dates, reports or features.
-5. THE ENGAGEMENT CLOSE (optional, use on about half of posts). One short, genuine question
+5. THE ENGAGEMENT CLOSE (use it on about three posts in four; early replies are what get a post shown). One short, genuine question
    that an informed reader would actually answer: "Would you trust a 2M-token summary of your own codebase?"
    Never "Thoughts?", never "Agree?", never "RT if…", never bait.
 

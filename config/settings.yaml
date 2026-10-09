@@ -21,6 +21,8 @@ limits:
   story_cooldown_days: 7
   entity_cooldown_days: 3
   max_drafts_per_run: 6        # highest-scoring first; the bar below keeps the feed to strong stories
+  prime_hours: {start: "13:00", end: "01:00"}   # when Premium users in the US and Europe are online (local time)
+  off_hours_max_posts: 3       # at most this many of the day's posts outside prime hours
   apply_to_manual: true        # Approve past the cap queues the post; it is handed to you at the next free slot
 
 scoring:
@@ -80,7 +82,7 @@ publishing:
   enabled: true
   x_username: SI4blog_
   # X API pay-per-use (docs.x.com, Oct 2026): post $0.015, post containing a URL $0.200, quote via id $0.015.
-  link_in_post: true           # intent (manual) mode: put the video link, or else the source link, inside the post itself
+  link_in_post: false          # reach first: the post stands alone, the source link goes in the first reply
   require_take: true           # Approve first asks for one line of your own take; it goes into the post (X Original Content rules)
   upload_public_domain_video: false  # re-uploading footage, even public domain, reads as aggregation; link or quote instead
   render_when_link_preview: false  # false = skip the rendered card when the link already brings a picture (real media still wins)

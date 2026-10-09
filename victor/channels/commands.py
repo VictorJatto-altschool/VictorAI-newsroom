@@ -190,7 +190,7 @@ def _after_approve(s: Session, settings: Settings, tg, now: datetime) -> None:
     st: dict = {}
     publish_approved(s, settings, st, now, channel=tg)
     if st.get("posts_deferred") and not st.get("posts_manual") and not st.get("posts_published"):
-        when = next_slot(now, settings.limits, _history(s, settings, now))
+        when = next_slot(now, settings.limits, _history(s, settings, now), settings.automation.get("timezone", "UTC"))
         tg.notify(f"Approved and queued. Next hand-off at {_local(settings, when)}.")
 
 
@@ -465,7 +465,7 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
         from ..intelligence.rules import next_slot
         from ..pipeline import _history
 
-        when = next_slot(now, settings.limits, _history(s, settings, now))
+        when = next_slot(now, settings.limits, _history(s, settings, now), settings.automation.get("timezone", "UTC"))
         queued = s.scalar(select(func.count(Draft.id)).where(Draft.status.in_(("approved", "approved_night"))))
         tg.notify(f"Next hand-off slot: {_local(settings, when) if when > now else 'now'}. Queued and approved: {queued}.")
     elif cmd == "/story":

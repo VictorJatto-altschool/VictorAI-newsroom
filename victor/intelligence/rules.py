@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -45,7 +45,21 @@ def window_opened_at(local_now: datetime, start: str) -> datetime:
     return opened
 
 
-def limits_ok(now_utc: datetime, limits: dict[str, Any], hist: PostingHistory) -> list[str]:
+def _prime(limits: dict[str, Any]) -> tuple[str, str] | None:
+    ph = limits.get("prime_hours")
+    if isinstance(ph, dict) and ph.get("start") and ph.get("end"):
+        return str(ph["start"]), str(ph["end"])
+    return None
+
+
+def in_prime(now_utc: datetime, limits: dict[str, Any], tz_name: str) -> bool:
+    ph = _prime(limits)
+    if not ph:
+        return True
+    return in_window(now_utc.astimezone(ZoneInfo(tz_name)), ph[0], ph[1])
+
+
+def limits_ok(now_utc: datetime, limits: dict[str, Any], hist: PostingHistory, tz_name: str = "UTC") -> list[str]:
     problems = []
     day_ago, hour_ago = now_utc - timedelta(days=1), now_utc - timedelta(hours=1)
     if sum(1 for t in hist.posted_at if t > day_ago) >= int(limits["max_posts_per_day"]):
@@ -56,13 +70,31 @@ def limits_ok(now_utc: datetime, limits: dict[str, Any], hist: PostingHistory) -
         gap = (now_utc - max(hist.posted_at)).total_seconds() / 60
         if gap < float(limits["min_gap_minutes"]):
             problems.append("min_gap")
+    # Outside prime hours only a few posts a day: reach is where the Premium readers are awake.
+    if _prime(limits) and not in_prime(now_utc, limits, tz_name):
+        off = sum(1 for t in hist.posted_at if t > day_ago and not in_prime(t, limits, tz_name))
+        if off >= int(limits.get("off_hours_max_posts", 3)):
+            problems.append("off_hours_cap")
     return problems
 
 
-def next_slot(now_utc: datetime, limits: dict[str, Any], hist: PostingHistory) -> datetime:
+def next_prime_start(now_utc: datetime, limits: dict[str, Any], tz_name: str) -> datetime:
+    ph = _prime(limits)
+    tz = ZoneInfo(tz_name)
+    local = now_utc.astimezone(tz)
+    start = _parse_hhmm(ph[0])
+    candidate = local.replace(hour=start.hour, minute=start.minute, second=0, microsecond=0)
+    if candidate <= local:
+        candidate += timedelta(days=1)
+    return candidate.astimezone(timezone.utc)
+
+
+def next_slot(now_utc: datetime, limits: dict[str, Any], hist: PostingHistory, tz_name: str = "UTC") -> datetime:
     """Earliest moment the limits allow another post. `now_utc` itself when they allow one now."""
     posted = sorted(hist.posted_at)
     candidates = [now_utc]
+    if "off_hours_cap" in limits_ok(now_utc, limits, hist, tz_name):
+        candidates.append(next_prime_start(now_utc, limits, tz_name))
     if posted:
         candidates.append(posted[-1] + timedelta(minutes=float(limits["min_gap_minutes"])))
         per_hour, per_day = int(limits["max_posts_per_hour"]), int(limits["max_posts_per_day"])
@@ -139,7 +171,7 @@ def decide(
     kw = contains_blocked(story_text, ov["blocked_keywords"])
     if kw:
         return Decision(True, "review", [f"sensitive:{kw}"])
-    lim = limits_ok(now_utc, limits, hist)
+    lim = limits_ok(now_utc, limits, hist, auto.get("timezone", "UTC"))
     if lim:
         return Decision(True, "review", lim)
     return Decision(True, "autonomous", ["overnight_rule_met"])

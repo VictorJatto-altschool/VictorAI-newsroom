@@ -693,7 +693,7 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
             continue
         hist = _history(s, settings, now)
         enforce = not manual or bool(settings.limits.get("apply_to_manual", False))
-        if enforce and limits_ok(now, settings.limits, hist):
+        if enforce and limits_ok(now, settings.limits, hist, settings.automation.get("timezone", "UTC")):
             stats["posts_deferred"] += 1
             continue
         key = f"draft-{d.id}-v{d.version}"
@@ -741,7 +741,7 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
                 from .intelligence.rules import next_slot
 
                 after = PostingHistory(posted_at=hist.posted_at + [now])
-                nxt = next_slot(now, settings.limits, after)
+                nxt = next_slot(now, settings.limits, after, settings.automation.get("timezone", "UTC"))
                 tz = ZoneInfo(settings.automation.get("timezone", "UTC"))
                 publisher.footer = f"Next slot opens at {nxt.astimezone(tz):%H:%M}."
         res = publisher.publish(req)
