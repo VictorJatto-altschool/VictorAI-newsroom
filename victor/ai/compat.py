@@ -52,6 +52,8 @@ class OpenAICompatProvider:
 
     def pick_fallback_model(self) -> str | None:
         ids = [m for m in self.list_models() if not any(x in m.lower() for x in _EXCLUDE)]
+        if self.name == "openrouter":
+            ids = [m for m in ids if m.endswith(":free")]  # never drift onto a paid model there
         for pref in MODEL_PREFERENCE:
             hit = next((m for m in ids if pref in m.lower()), None)
             if hit:
@@ -85,6 +87,8 @@ class OpenAICompatProvider:
 
     def alternative_models(self) -> list[str]:
         ids = [m for m in self.list_models() if not any(x in m.lower() for x in _EXCLUDE) and m != self.model]
+        if self.name == "openrouter":
+            ids = [m for m in ids if m.endswith(":free")]
         ranked = [m for pref in MODEL_PREFERENCE for m in ids if pref in m.lower()]
         return list(dict.fromkeys(ranked + ids))[:3]
 
