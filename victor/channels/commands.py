@@ -118,10 +118,12 @@ def _handle_callback(s: Session, settings: Settings, tg, cq: dict, now: datetime
             tg.answer_callback(cq["id"], "One line from you first")
             prompt = (f"Draft #{d.id}: type ONE line of your own take (what you think, or why it matters to your audience). "
                       f"It goes into the post above the link and is what makes the post yours under X's Original Content rules.")
+            buttons = [[{"text": "Post without my take", "callback_data": f"skiptake:{d.id}"}]]
             if (d.suggested_take or "").strip():
-                prompt += f"\n\nSuggestion to rephrase in your own words: {d.suggested_take.strip()}"
+                prompt += f"\n\nSuggestion (tap the button to copy it, then change a few words to make it yours):\n{d.suggested_take.strip()}"
+                buttons.insert(0, [{"text": "Copy suggested take", "copy_text": {"text": d.suggested_take.strip()[:256]}}])
             if hasattr(tg, "send_with_buttons"):
-                tg.send_with_buttons(prompt, [[{"text": "Post without my take", "callback_data": f"skiptake:{d.id}"}]])
+                tg.send_with_buttons(prompt, buttons)
             else:
                 tg.notify(prompt + " Send 'skip' to post without it.")
             return

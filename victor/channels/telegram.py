@@ -13,20 +13,26 @@ log = logging.getLogger(__name__)
 UPDATES_TIMEOUT = 5.0  # getUpdates is a quick poll; a slow Telegram must not hold up collection
 
 
-def draft_keyboard(draft_id: int) -> dict:
+def copy_button(text: str, label: str = "Copy suggested take") -> dict:
+    """Telegram copies `text` to the clipboard when tapped (Bot API 7.11+). Max 256 characters."""
+    return {"text": label, "copy_text": {"text": text[:256]}}
+
+
+def draft_keyboard(draft_id: int, suggested_take: str = "") -> dict:
     d = draft_id
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "Approve", "callback_data": f"approve:{d}"},
-                {"text": "Approve for night", "callback_data": f"night:{d}"},
-            ],
-            [
-                {"text": "Rewrite", "callback_data": f"rewrite:{d}"},
-                {"text": "Reject", "callback_data": f"reject:{d}"},
-            ],
-        ]
-    }
+    rows = [
+        [
+            {"text": "Approve", "callback_data": f"approve:{d}"},
+            {"text": "Approve for night", "callback_data": f"night:{d}"},
+        ],
+        [
+            {"text": "Rewrite", "callback_data": f"rewrite:{d}"},
+            {"text": "Reject", "callback_data": f"reject:{d}"},
+        ],
+    ]
+    if suggested_take.strip():
+        rows.append([copy_button(suggested_take.strip())])
+    return {"inline_keyboard": rows}
 
 
 class TelegramChannel:
@@ -52,7 +58,7 @@ class TelegramChannel:
     # ---- outbound
     def send_draft(self, card: DraftCard) -> str | None:
         res = self._call("sendMessage", chat_id=self.chat_id, text=render_card(card)[:4000],
-                         disable_web_page_preview=False, reply_markup=draft_keyboard(card.draft_id))
+                         disable_web_page_preview=False, reply_markup=draft_keyboard(card.draft_id, card.suggested_take))
         time.sleep(0.6)  # Telegram allows ~1 message/second per chat; a busy news hour can mean dozens of cards
         return str(res["message_id"]) if res else None
 
