@@ -260,12 +260,15 @@ def cmd_loop(args):
                     if args.lease:
                         heartbeat()
                     if tg:
-                        from .channels.commands import expire_cards
+                        from .channels.commands import expire_cards, send_reminders
 
                         with session() as s:
                             n = expire_cards(s, settings, tg)
+                            sent = send_reminders(s, settings, tg)
                         if n:
                             print(f"{utcnow():%H:%M} expired {n} stale card(s)", flush=True)
+                        if sent:
+                            print(f"{utcnow():%H:%M} reminders sent: {sent}", flush=True)
                     last_beat = time.time()
                 except Exception as e:  # noqa: BLE001
                     print(f"housekeeping failed: {type(e).__name__}: {e}", flush=True)

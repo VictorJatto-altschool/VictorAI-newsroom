@@ -108,6 +108,14 @@ digest:
 telegram:
   card_ttl_minutes: 30         # a pending card nobody acted on in this long is deleted from the chat (0 = keep forever)
 
+reminders:
+  enabled: true
+  slot: true                   # when a slot opens and nothing is waiting, send the strongest fresh story unasked
+  slot_every_minutes: 60
+  replies_at: "13:00"          # daily nudge for the reply habit (local time)
+  growth_weekday: 0            # Monday
+  growth_at: "09:00"
+
 dashboard:
   enabled: true                # writes docs/index.html after each run (serve with GitHub Pages, free)
   show_drafts: false           # the repo is public; keep draft text out of the page unless you want it there

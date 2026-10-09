@@ -32,6 +32,7 @@ HELP = """Commands:
 /growth <followers> <verified_impressions_90d> - record numbers from X analytics
 /digest - weekly summary now
 /next - when the next slot opens, and the strongest story trending right now (drafted on the spot if needed)
+/thread [card number] [parts] - a ready-to-post thread on that card's story, or on the strongest story of the day
 /clearchat - delete every bot message except ready posts waiting for your Posted tap
 /story <link> [angle] - draft a story you found yourself; an X post link is quoted so its video plays
 Reply to a draft card with new text to edit it. Buttons: Approve, Approve for night, Rewrite, Reject."""
@@ -176,6 +177,109 @@ def _handle_callback(s: Session, settings: Settings, tg, cq: dict, now: datetime
             tg.mark(msg_id, "Rewrite failed")
     else:
         tg.answer_callback(cq["id"])
+
+
+def send_thread(s: Session, settings: Settings, tg, now: datetime, arg: str = "", provider=None) -> list[str] | None:
+    """/thread [card number] [parts]: a ready-to-post thread on that card's story, or on the strongest story of the day."""
+    from ..ai.thread import generate_thread
+    from ..publish.intent import intent_url
+
+    parts_n = 6
+    story = None
+    tokens = arg.split()
+    nums = [t for t in tokens if t.isdigit()]
+    if nums:
+        d = s.get(Draft, int(nums[0]))
+        if d:
+            story = d.story
+        if len(nums) > 1:
+            parts_n = max(3, min(10, int(nums[1])))
+        elif not d and 3 <= int(nums[0]) <= 10:
+            parts_n = int(nums[0])
+    if story is None:
+        story = s.scalars(select(Story).where(Story.last_updated_at >= now - timedelta(hours=24),
+                                              Story.classification.in_(("breaking", "hot", "trending")))
+                          .order_by(Story.score.desc()).limit(1)).first()
+    if story is None:
+        tg.notify("No strong story in the last 24 hours to build a thread on. Try /thread <card number>.")
+        return None
+    items = sorted((i for i in story.items if not i.filtered_reason), key=lambda i: i.source.tier)
+    views = [SourceView(i.id, i.publisher or i.source.name, i.source.tier, i.title, i.summary, i.original_url) for i in items]
+    if not views:
+        tg.notify("That story has no readable sources to build from.")
+        return None
+    provider = provider or pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
+    try:
+        posts = generate_thread(provider, settings.voice, story.title, story.category, views, parts_n)
+    except Exception as e:  # noqa: BLE001
+        tg.notify(f"Thread failed: {type(e).__name__}: {str(e)[:120]}")
+        return None
+    from ..pipeline import event
+
+    event(s, "thread_generated", "story", story.id, parts=len(posts), by="telegram")
+    body = f"THREAD on: {story.title[:90]}\n\n" + "\n\n".join(f"{i + 1}/{len(posts)}\n{p}" for i, p in enumerate(posts))
+    body += f"\n\nSource for the last reply: {views[0].url}"
+    buttons = [[{"text": "Open part 1 in X", "url": intent_url(posts[0])}]]
+    row: list[dict] = []
+    for i, p in enumerate(posts[1:], start=2):
+        row.append({"text": f"Copy {i}", "copy_text": {"text": p[:256]}})
+        if len(row) == 3:
+            buttons.append(row); row = []
+    if row:
+        buttons.append(row)
+    if hasattr(tg, "send_with_buttons"):
+        tg.send_with_buttons(body[:4000], buttons)
+    else:
+        tg.notify(body[:4000])
+    return posts
+
+
+def send_reminders(s: Session, settings: Settings, tg, now: datetime | None = None) -> list[str]:
+    """Nudges, each at most once per period: slot open with the strongest story, the daily reply habit, Monday growth numbers."""
+    from ..intelligence.rules import next_slot
+    from ..pipeline import _history, draft_one, get_state, set_state
+
+    now = now or _utcnow()
+    cfg = settings.raw.get("reminders") or {}
+    if not cfg.get("enabled", True):
+        return []
+    tz = ZoneInfo(settings.automation.get("timezone", "UTC"))
+    local = now.astimezone(tz)
+    sent: list[str] = []
+
+    # 1. A slot is open and nothing is waiting for you: send the strongest fresh story (at most once an hour).
+    if cfg.get("slot", True):
+        waiting = s.scalar(select(func.count(Post.id)).where(Post.status == "manual", Post.created_at >= now - timedelta(hours=2)))
+        last = get_state(s, "reminder_slot_at", "")
+        recently = bool(last) and (now - datetime.fromisoformat(last)) < timedelta(minutes=int(cfg.get("slot_every_minutes", 60)))
+        if not waiting and not recently and next_slot(now, settings.limits, _history(s, settings, now), tz.key) <= now:
+            top = s.scalars(select(Story).where(Story.last_updated_at >= now - timedelta(hours=3), Story.status == "discovered",
+                                                Story.classification.in_(("breaking", "hot", "trending")))
+                            .order_by(Story.score.desc()).limit(1)).first()
+            if top is not None:
+                d = draft_one(s, settings, top, now, channel=tg)
+                if d is not None:
+                    tg.notify(f"Slot open now. Strongest story of the hour is above (card #{d.id}): approve it to post.")
+                    set_state(s, "reminder_slot_at", now.isoformat())
+                    sent.append("slot")
+
+    # 2. Daily reply-habit nudge.
+    at = str(cfg.get("replies_at", "13:00"))
+    if local.strftime("%H:%M") >= at and get_state(s, "reminder_replies_day", "") != local.strftime("%Y-%m-%d"):
+        tg.notify("Reply window: 20 replies under the big accounts in the niche today. Two lines, a fact or a position, no links. "
+                  "That is where followers come from.")
+        set_state(s, "reminder_replies_day", local.strftime("%Y-%m-%d"))
+        sent.append("replies")
+
+    # 3. Weekly growth numbers.
+    if local.weekday() == int(cfg.get("growth_weekday", 0)) and local.strftime("%H:%M") >= str(cfg.get("growth_at", "09:00")):
+        wk = f"{local.isocalendar().year}-{local.isocalendar().week}"
+        if get_state(s, "reminder_growth_week", "") != wk:
+            tg.notify("Monday numbers: open X analytics and send /growth <followers> <verified impressions 90d>. "
+                      "Then /digest for the week's summary.")
+            set_state(s, "reminder_growth_week", wk)
+            sent.append("growth")
+    return sent
 
 
 def _local(settings: Settings, dt: datetime) -> str:
@@ -461,6 +565,8 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
     elif cmd == "/clearchat":
         n = clear_chat(s, settings, tg, now)
         tg.notify(f"Cleared {n} messages. Ready posts waiting for your Posted tap were kept.")
+    elif cmd == "/thread":
+        send_thread(s, settings, tg, now, arg)
     elif cmd == "/next":
         from ..intelligence.rules import next_slot
         from ..pipeline import _history, draft_one

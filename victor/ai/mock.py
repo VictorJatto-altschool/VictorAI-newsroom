@@ -10,6 +10,10 @@ class MockProvider:
     model = "template-v1"
 
     def complete(self, system: str, user: str, max_tokens: int = 600) -> str:
+        if user.startswith("THREAD REQUEST"):
+            title = _between(user, "TITLE:", "\n") or "Untitled"
+            return json.dumps({"posts": [f"[DEV MODE] {title[:80]}", "Fact one from the sources.", "Fact two from the sources.",
+                                         "Why it matters: pending real provider. What would you do with it?"]})
         if user.startswith("OPERATOR NOTE:"):
             note = _between(user, "OPERATOR NOTE:", "--- END NOTE")
             post = f"[DEV MODE] From the desk: {note[:180]}\n\nTakeaway: pending real AI provider."
