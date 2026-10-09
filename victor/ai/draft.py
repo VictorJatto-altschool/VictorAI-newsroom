@@ -41,11 +41,62 @@ class SourceView:
     url: str
 
 
+class FailoverProvider:
+    """Several free providers in order. A rate limit or outage on one moves to the next for the rest of the run."""
+
+    def __init__(self, providers: list[AIProvider]):
+        self._providers = providers
+        self._idx = 0
+
+    @property
+    def name(self) -> str:
+        return self._providers[self._idx].name
+
+    @property
+    def model(self) -> str:
+        return self._providers[self._idx].model
+
+    def complete(self, system: str, user: str, max_tokens: int = 600) -> str:
+        first_error: Exception | None = None
+        for attempt in range(len(self._providers)):
+            p = self._providers[self._idx]
+            try:
+                return p.complete(system, user, max_tokens)
+            except ProviderError as e:
+                first_error = first_error or e
+                msg = str(e).lower()
+                transient = "429" in msg or "rate limit" in msg or "http 5" in msg or "network" in msg or "timed out" in msg
+                if not transient or attempt == len(self._providers) - 1:
+                    raise
+                self._idx = (self._idx + 1) % len(self._providers)
+                log.warning("provider %s unavailable (%s); switching to %s", p.name, str(e)[:80], self.name)
+        raise first_error or ProviderError("no provider")
+
+
+def configured_providers(env: Env, order: list[str]) -> list[AIProvider]:
+    out: list[AIProvider] = []
+    for name in order:
+        p = _single_provider(env, name)
+        if p is not None and p.name != "mock":
+            out.append(p)
+    return out
+
+
 def pick_provider(env: Env, order: list[str]) -> AIProvider:
-    """First configured provider in `order` wins. 'compat' means whatever AI_BASE_URL/AI_API_KEY/AI_MODEL point at."""
+    """All configured providers in `order`, with automatic failover; the mock only when none is configured."""
+    real = configured_providers(env, order)
+    if len(real) >= 2:
+        return FailoverProvider(real)
+    if real:
+        return real[0]
+    return MockProvider()
+
+
+def _single_provider(env: Env, name: str) -> AIProvider | None:
+    """One provider by name, or None when its key is missing. 'compat' means whatever AI_BASE_URL points at."""
     from .compat import PRESETS, OpenAICompatProvider
 
-    for name in order:
+    for name in [name]:
         if name == "anthropic" and env.anthropic_api_key:
             from .anthropic_provider import DEFAULT_MODEL, AnthropicProvider
 
@@ -63,7 +114,7 @@ def pick_provider(env: Env, order: list[str]) -> AIProvider:
             return OpenAICompatProvider(name, PRESETS[name][0], getattr(env, f"{name}_api_key"), env.ai_model or PRESETS[name][1])
         if name == "mock":
             return MockProvider()
-    return MockProvider()
+    return None
 
 
 def build_user_prompt(title: str, category: str, sources: list[SourceView], classification: str = "trending",

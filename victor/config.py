@@ -49,6 +49,9 @@ class Env:
     ai_base_url: str = ""  # any OpenAI-compatible endpoint (GitHub Models, OpenRouter, Mistral, Cerebras, Ollama)
     ai_api_key: str = ""
     ai_model: str = ""
+    cerebras_api_key: str = ""   # free tier, no card: used as a failover alongside Groq and Gemini
+    openrouter_api_key: str = ""
+    mistral_api_key: str = ""
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
     x_api_key: str = ""
@@ -60,7 +63,8 @@ class Env:
 
     @property
     def has_ai(self) -> bool:
-        return bool(self.anthropic_api_key or self.gemini_api_key or self.groq_api_key or self.ai_base_url)
+        return bool(self.anthropic_api_key or self.gemini_api_key or self.groq_api_key or self.ai_base_url
+                    or self.cerebras_api_key or self.openrouter_api_key or self.mistral_api_key)
 
     @property
     def dev_mode(self) -> bool:
@@ -128,6 +132,9 @@ def load_env(dotenv_path: Path | None = None) -> Env:
         ai_base_url=g("AI_BASE_URL", ""),
         ai_api_key=g("AI_API_KEY", ""),
         ai_model=g("AI_MODEL", ""),
+        cerebras_api_key=g("CEREBRAS_API_KEY", ""),
+        openrouter_api_key=g("OPENROUTER_API_KEY", ""),
+        mistral_api_key=g("MISTRAL_API_KEY", ""),
         telegram_bot_token=g("TELEGRAM_BOT_TOKEN", ""),
         telegram_chat_id=g("TELEGRAM_CHAT_ID", ""),
         x_api_key=g("X_API_KEY", ""),

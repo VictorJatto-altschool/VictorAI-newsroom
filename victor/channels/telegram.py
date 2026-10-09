@@ -64,6 +64,15 @@ class TelegramChannel:
                          reply_markup={"inline_keyboard": buttons})
         return str(res["message_id"]) if res else None
 
+    def edit_with_buttons(self, message_id: str | None, text: str, buttons: list[list[dict]]) -> str | None:
+        """Rewrite an existing message in place (the draft card becomes the ready post). Falls back to a new message."""
+        if message_id:
+            res = self._call("editMessageText", chat_id=self.chat_id, message_id=int(message_id), text=text[:4000],
+                             disable_web_page_preview=True, reply_markup={"inline_keyboard": buttons})
+            if res:
+                return str(message_id)
+        return self.send_with_buttons(text, buttons)
+
     def send_file(self, path: str, caption: str = "") -> str | None:
         """Send a local image or video so the operator can save it and attach it in the X composer."""
         p = Path(path)

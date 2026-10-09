@@ -714,6 +714,7 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
                              media_path=media.get("path", "") if media.get("mode") in ("upload", "render") else "")
         if manual:
             publisher.draft_id = d.id
+            publisher.message_ref = d.channel_ref  # transform the card in place instead of adding a message
         res = publisher.publish(req)
         post.status, post.remote_id, post.remote_url, post.reply_remote_id, post.error = (
             res.status, res.remote_id, res.remote_url, res.reply_remote_id, res.error)

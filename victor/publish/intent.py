@@ -32,6 +32,7 @@ class ManualPublisher:
     def __init__(self, channel, draft_id: int | None = None):
         self._tg = channel
         self.draft_id = draft_id
+        self.message_ref: str | None = None  # the draft card to transform in place
 
     def publish(self, req: PublishRequest) -> PublishResult:
         url = intent_url(req.text, req.quote_url)
@@ -47,7 +48,9 @@ class ManualPublisher:
         if d:
             buttons.append([{"text": "Posted", "callback_data": f"posted:{d}"}, {"text": "Skip", "callback_data": f"skip:{d}"}])
         ref = None
-        if hasattr(self._tg, "send_with_buttons"):
+        if self.message_ref and hasattr(self._tg, "edit_with_buttons"):
+            ref = self._tg.edit_with_buttons(self.message_ref, "\n".join(lines), buttons)  # the card becomes the post
+        elif hasattr(self._tg, "send_with_buttons"):
             ref = self._tg.send_with_buttons("\n".join(lines), buttons)
         else:
             self._tg.notify("\n".join(lines) + f"\n\nOpen in X: {url}")
