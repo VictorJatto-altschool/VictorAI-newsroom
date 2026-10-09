@@ -116,8 +116,12 @@ def _handle_callback(s: Session, settings: Settings, tg, cq: dict, now: datetime
             # X's Original Content rules reward your own perspective. One line from you goes into the post.
             set_state(s, "awaiting_take", str(d.id))
             tg.answer_callback(cq["id"], "One line from you first")
-            tg.notify(f"Draft #{d.id}: reply with ONE line of your own take (what you think, or why it matters to your audience). "
-                      f"It goes into the post above the link. Send 'skip' to post without it.")
+            prompt = (f"Draft #{d.id}: type ONE line of your own take (what you think, or why it matters to your audience). "
+                      f"It goes into the post above the link and is what makes the post yours under X's Original Content rules.")
+            if hasattr(tg, "send_with_buttons"):
+                tg.send_with_buttons(prompt, [[{"text": "Post without my take", "callback_data": f"skiptake:{d.id}"}]])
+            else:
+                tg.notify(prompt + " Send 'skip' to post without it.")
             return
         d.status = "approved" if action == "approve" else "approved_night"
         d.decided_at = now
@@ -130,6 +134,17 @@ def _handle_callback(s: Session, settings: Settings, tg, cq: dict, now: datetime
         publish_approved(s, settings, st, now, channel=tg)  # manual mode: hands off to the phone right away
         if st.get("posts_deferred") and not st.get("posts_manual") and not st.get("posts_published"):
             tg.notify("Approved, but a posting limit is active right now. It will be offered at the next free slot.")
+    elif action == "skiptake":
+        from ..pipeline import publish_approved
+
+        set_state(s, "awaiting_take", "")
+        if d.status in ("pending", "blocked"):
+            d.status, d.decided_at = "approved", now
+            event(s, "draft_approved", "draft", d.id, by="telegram", take="skipped")
+            tg.mark(d.channel_ref, "Approved")
+            tg.mark(msg_id, "Posting without a take")
+            publish_approved(s, settings, {}, now, channel=tg)
+        tg.answer_callback(cq["id"], "Approved")
     elif action == "posted":
         post = s.scalar(select(Post).where(Post.draft_id == d.id).order_by(Post.id.desc()))
         if post and post.status == "manual":
