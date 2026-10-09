@@ -55,7 +55,7 @@ def test_queued_approval_says_when(fresh_db, now):
     tg.push_button(f"approve:{d2id}", "555")
     with session() as s:
         process_updates(s, settings, tg, now + timedelta(minutes=5))
-    assert any("Next hand-off at" in m for m in tg.sent)
+    assert any("handed to you at" in m and "one post per hour" in m for m in tg.sent)
 
 
 def test_clearchat_deletes_everything_but_handoffs(fresh_db, now):

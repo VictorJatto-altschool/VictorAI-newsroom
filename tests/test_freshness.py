@@ -34,15 +34,16 @@ def test_stale_approval_expires_and_strongest_goes_first(fresh_db, now):
     settings.raw["limits"]["max_drafts_per_run"] = 0
     tg = FakeTelegramAll()
     run_once(settings, now, fetcher=busy_fetcher(now), provider=MockProvider(), channel=tg, publisher=MockPublisher(), check_links=False)
+    later = now + timedelta(hours=5)  # 18:00 Lagos: well inside prime hours, so the 2-hour approval TTL applies plainly
     with session() as s:
         drafts = s.scalars(select(Draft).order_by(Draft.id)).all()
         weak, strong = drafts[0], drafts[-1]
         weak.story.score, strong.story.score = 61.0, 95.0
-        weak.status, weak.decided_at = "approved", now - timedelta(hours=3)   # stale
-        strong.status, strong.decided_at = "approved", now - timedelta(minutes=5)
+        weak.status, weak.decided_at = "approved", later - timedelta(hours=3)   # stale
+        strong.status, strong.decided_at = "approved", later - timedelta(minutes=5)
         wid, sid = weak.id, strong.id
     with session() as s:
-        publish_approved(s, settings, {}, now, channel=tg)
+        publish_approved(s, settings, {}, later, channel=tg)
         assert s.get(Draft, wid).status == "expired"
         assert s.get(Draft, sid).status == "handed_off"
         assert s.scalar(select(Post)).draft_id == sid
