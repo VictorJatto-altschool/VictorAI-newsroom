@@ -13,6 +13,8 @@ RUN pip install --no-cache-dir ".[postgres]"
 ENV PYTHONUNBUFFERED=1 PYTHONIOENCODING=utf-8 PORT=10000
 EXPOSE 10000
 
+# exec: Render stops a replaced instance with SIGTERM; the signal must reach python itself so the
+# loop releases its lease at once and the new instance starts handling Telegram within seconds.
 # One process: a collection cycle every 15 minutes, Telegram buttons answered in between,
 # and a tiny HTTP server so the host (and an uptime pinger) can see it is alive.
-CMD ["sh", "-c", "python -m victor loop --minutes 15 --lease --http-port ${PORT}"]
+CMD ["sh", "-c", "exec python -m victor loop --minutes 15 --lease --http-port ${PORT}"]

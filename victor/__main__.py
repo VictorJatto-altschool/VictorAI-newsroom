@@ -193,7 +193,7 @@ def cmd_loop(args):
     provider = pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
     from .pipeline import get_state, set_state
 
-    LEASE_SECONDS = 180
+    LEASE_SECONDS = 75  # heartbeat every 30 s; a replaced instance that failed to release is forgotten in about a minute
 
     def lease_alive() -> bool:
         with session() as s:
@@ -229,7 +229,7 @@ def cmd_loop(args):
         # previous holder (a dying instance, or the laptop) will stop heartbeating within a few minutes.
         while lease_alive():
             print("another newsroom loop holds a fresh lease; waiting for it to let go", flush=True)
-            time.sleep(15)
+            time.sleep(10)
         heartbeat()
     last_beat = time.time()
     stop_at = time.time() + args.max_minutes * 60 if args.max_minutes else None
@@ -255,7 +255,7 @@ def cmd_loop(args):
                 except Exception as e:  # noqa: BLE001
                     print(f"poll error: {type(e).__name__}: {e}", flush=True)
                     time.sleep(5)
-            if time.time() - last_beat > 60:
+            if time.time() - last_beat > 30:
                 try:
                     if args.lease:
                         heartbeat()
