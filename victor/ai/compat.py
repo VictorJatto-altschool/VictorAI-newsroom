@@ -62,14 +62,39 @@ class OpenAICompatProvider:
         try:
             return self._complete(system, user, max_tokens)
         except ProviderError as e:
-            if ("model" in str(e).lower() and ("not exist" in str(e) or "not found" in str(e) or "decommissioned" in str(e))
-                    and not self._resolved):
+            msg = str(e).lower()
+            if ("model" in msg and ("not exist" in msg or "not found" in msg or "decommissioned" in msg)) and not self._resolved:
                 self._resolved = True
                 alt = self.pick_fallback_model()
                 if alt and alt != self.model:
                     self.model = alt
                     return self._complete(system, user, max_tokens)
+            if "429" in msg or "rate limit" in msg:
+                # Each model has its own free allowance: switch to another listed model for the rest of this run.
+                for alt in self.alternative_models():
+                    try:
+                        out = self._complete_with(alt, system, user, max_tokens)
+                    except ProviderError as e2:
+                        if "429" in str(e2) or "rate limit" in str(e2).lower():
+                            continue
+                        raise
+                    self.model = alt
+                    return out
+                raise ProviderError(f"{self.name} rate limited on every available model: {e}") from e
             raise
+
+    def alternative_models(self) -> list[str]:
+        ids = [m for m in self.list_models() if not any(x in m.lower() for x in _EXCLUDE) and m != self.model]
+        ranked = [m for pref in MODEL_PREFERENCE for m in ids if pref in m.lower()]
+        return list(dict.fromkeys(ranked + ids))[:3]
+
+    def _complete_with(self, model: str, system: str, user: str, max_tokens: int) -> str:
+        keep = self.model
+        self.model = model
+        try:
+            return self._complete(system, user, max_tokens)
+        finally:
+            self.model = keep
 
     def _complete(self, system: str, user: str, max_tokens: int = 600, json_mode: bool = True) -> str:
         reasoning = "gpt-oss" in self.model.lower() or "qwen3" in self.model.lower() or "deepseek-r1" in self.model.lower()

@@ -20,7 +20,7 @@ limits:
   min_gap_minutes: 45
   story_cooldown_days: 7
   entity_cooldown_days: 3
-  max_drafts_per_run: 0        # 0 = no cap: every story that reaches "trending" or above is drafted and sent to you
+  max_drafts_per_run: 12       # highest-scoring first; the rest wait for the next cycle (free AI tiers rate-limit bursts)
   apply_to_manual: false       # posting limits only bind automatic (API) posting; when you post by hand, you decide
 
 scoring:

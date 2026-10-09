@@ -417,6 +417,11 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
             stats["drafts_failed"] += 1
             event(s, "draft_failed", "story", st.id, error=str(e)[:300], provider=provider.name)
             log.warning("draft failed for story %s: %s", st.id, e)
+            if "429" in str(e) or "rate limit" in str(e).lower():
+                # The provider is out of allowance: stop drafting this cycle; the stories stay eligible for the next one.
+                stats["rate_limited"] = True
+                event(s, "rate_limited", detail_provider=provider.name)
+                break
             continue
         checks = run_checks(out.text, views, settings.drafting, check_links=check_links)
         media_refs = [m for i in items for m in (i.media or [])]
