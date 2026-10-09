@@ -302,7 +302,14 @@ def rescore(s: Session, settings: Settings, stats: dict[str, Any], now: datetime
     recent = _recent_posts(s, cooldown, now)
     rec_ents = [s.get(Story, p.story_id).entities for p in recent]
     rec_age = [(now - _aware(p.created_at)).total_seconds() / 86400 for p in recent]
-    active = s.scalars(select(Story).where(Story.last_updated_at >= now - ACTIVE_WINDOW, Story.status == "discovered")).all()
+    # Three queries for everything (stories, their items, the items' sources) instead of two per story:
+    # over a remote database that is the difference between seconds and many minutes.
+    from sqlalchemy.orm import selectinload
+
+    active = s.scalars(
+        select(Story).where(Story.last_updated_at >= now - ACTIVE_WINDOW, Story.status == "discovered")
+        .options(selectinload(Story.items).selectinload(Item.source))
+    ).all()
     for st in active:
         items = [i for i in st.items if not i.filtered_reason]
         if not items:
@@ -842,19 +849,26 @@ def _run_cycle(settings, now, stats, timer, channel, provider, publisher, check_
         try:
             with timer("commands"):
                 stats["commands_handled"] = _commands(s, settings, channel, now, provider)
+            # Commit after every stage: a hosted Postgres pooler drops transactions that stay open for minutes,
+            # and a stage that fails must not throw away the work of the stages before it.
             with timer("collect"):
                 new_items = collect(s, settings, stats, now, fetcher=overrides.get("fetcher", fetch_source),
                                     resolver=overrides.get("resolver"))
+            s.commit()
             with timer("cluster"):
                 cluster_items(s, new_items, stats, now)
+            s.commit()
             with timer("score"):
                 rescore(s, settings, stats, now)
+            s.commit()
             with timer("draft"):
                 draft_stories(s, settings, stats, now, provider=provider, channel=channel, check_links=check_links)
                 draft_educational(s, settings, stats, now, provider=provider, channel=channel)
+            s.commit()
             with timer("publish"):
                 publish_approved(s, settings, stats, now, publisher=publisher, channel=channel)
                 stats["digest_sent"] = maybe_send_digest(s, settings, channel, now)
+            s.commit()
             run.ok = True  # before the dashboard snapshot, so the page shows the cycle as ok
             if settings.raw.get("dashboard", {}).get("enabled", True) and overrides.get("dashboard", True):
                 from .dashboard import write_dashboard
