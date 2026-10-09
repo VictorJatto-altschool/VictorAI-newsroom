@@ -17,7 +17,7 @@ from .channels.base import DraftCard
 from .channels.console import ConsoleChannel
 from .channels.telegram import TelegramChannel
 from .collect.fetch import FETCH_DEADLINE, FetchResult, fetch_source, make_client
-from .collect.normalize import host_of, normalize_publisher
+from .collect.normalize import canonical_url, host_of, normalize_publisher
 from .config import Settings, SourceConfig
 from .db import session
 from .intelligence.cluster import Candidate, best_match
@@ -162,8 +162,34 @@ def _existing_urls(s: Session, urls: list[str]) -> set[str]:
     return seen
 
 
+def _resolve_gnews_links(s: Session, due_cfgs: list[SourceConfig], results: list[FetchResult], cap: int,
+                         resolver=None) -> int:
+    """Swap Google News wrapper links for the publisher's real address on items we have not stored yet.
+
+    X only shows a preview card for the real address, and the real address is what lets a Google News copy
+    deduplicate against the publisher's own feed item.
+    """
+    from .collect.gnews import is_gnews, resolve_many
+
+    resolver = resolver or resolve_many
+    raws = [raw for cfg, res in zip(due_cfgs, results) if cfg.kind == "gnews" and res.ok
+            for raw in res.items if is_gnews(raw.original_url)]
+    if not raws or cap <= 0:
+        return 0
+    known = _existing_urls(s, [r.canonical_url for r in raws])
+    todo = [r for r in raws if r.canonical_url not in known][:cap]
+    mapping = resolver([r.original_url for r in todo])
+    n = 0
+    for r in todo:
+        real = mapping.get(r.original_url)
+        if real and not is_gnews(real):
+            r.original_url, r.canonical_url = real, canonical_url(real)
+            n += 1
+    return n
+
+
 def collect(s: Session, settings: Settings, stats: dict[str, Any], now: datetime | None = None,
-            fetcher=fetch_source) -> list[Item]:
+            fetcher=fetch_source, resolver=None) -> list[Item]:
     now = now or utcnow()
     rows = sync_sources(s, settings)
     new_items: list[Item] = []
@@ -178,6 +204,8 @@ def collect(s: Session, settings: Settings, stats: dict[str, Any], now: datetime
     stats["sources_checked"] = len(due)
     results = fetch_all(due, fetcher=fetcher, workers=int(ccfg.get("workers", DEFAULT_FETCH_WORKERS)),
                         deadline=float(ccfg.get("source_timeout_seconds", FETCH_DEADLINE)))
+    stats["gnews_resolved"] = _resolve_gnews_links(s, due_cfgs, results, int(ccfg.get("gnews_resolve_per_cycle", 40)),
+                                                   resolver=resolver)
     seen = _existing_urls(s, [raw.canonical_url for res in results for raw in res.items if raw.canonical_url])
     for cfg, res in zip(due_cfgs, results):
         row = rows[cfg.key]
@@ -338,18 +366,20 @@ def _official_handles(settings: Settings) -> set[str]:
 
 
 def _source_order(i: Item, now: datetime) -> tuple:
-    """Best tier first; within a tier, written sources before videos, then newest first."""
+    """Best tier first; within a tier, written sources before videos, then newest first. Unresolved Google wrappers last."""
     is_video = 1 if i.source.kind == "youtube" or "youtube.com" in i.original_url else 0
-    return (i.source.tier, is_video, -(_aware(i.published_at) or now).timestamp())
+    is_wrapper = 1 if "news.google.com" in (i.original_url or "") else 0
+    return (i.source.tier, is_wrapper, is_video, -(_aware(i.published_at) or now).timestamp())
 
 
 def _reply_text(views: list[SourceView], media_refs: list[dict]) -> str:
-    """First reply: the article source, plus the official video link when one exists (links stay out of the post)."""
+    """The article source link (never a Google wrapper when a real address exists), plus the official video link."""
     if not views:
         return ""
-    lines = [f"Source: {views[0].url}"]
+    primary = next((v for v in views if "news.google.com" not in v.url), views[0])
+    lines = [f"Source: {primary.url}"]
     yt = next((m for m in media_refs if m.get("type") == "youtube"), None)
-    if yt and yt["url"] != views[0].url:
+    if yt and yt["url"] != primary.url:
         lines.append(f"Video: {yt['url']}")
     return "\n".join(lines)
 
@@ -737,7 +767,8 @@ def run_once(settings: Settings, now: datetime | None = None, **overrides: Any) 
             with timer("commands"):
                 stats["commands_handled"] = _commands(s, settings, channel, now, provider)
             with timer("collect"):
-                new_items = collect(s, settings, stats, now, fetcher=overrides.get("fetcher", fetch_source))
+                new_items = collect(s, settings, stats, now, fetcher=overrides.get("fetcher", fetch_source),
+                                    resolver=overrides.get("resolver"))
             with timer("cluster"):
                 cluster_items(s, new_items, stats, now)
             with timer("score"):
