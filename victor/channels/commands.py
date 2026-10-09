@@ -615,6 +615,7 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
             tg.notify("Usage: /story <link to article or X post> [your note on the angle]")
         else:
             note = parts[1] if len(parts) > 1 else ""
+            tg.notify("Reading that link and drafting; the card lands in about half a minute.")
             try:
                 story = ingest_url(s, settings, url, note=note, now=now)
             except Exception as e:  # noqa: BLE001
