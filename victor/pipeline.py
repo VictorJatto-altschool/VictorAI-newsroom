@@ -699,7 +699,19 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
     tz = ZoneInfo(settings.automation.get("timezone", "UTC"))
     local = now.astimezone(tz)
     night = in_window(local, settings.overnight["window_start"], settings.overnight["window_end"])
-    drafts = s.scalars(select(Draft).where(Draft.status.in_(("approved", "approved_night"))).order_by(Draft.created_at)).all()
+    # Stale approvals expire: the next slot belongs to what is trending now, never to this morning's story.
+    ttl = timedelta(minutes=float(settings.limits.get("approval_ttl_minutes", 120)))
+    for stale in s.scalars(select(Draft).where(Draft.status.in_(("approved", "approved_night")), Draft.decided_at < now - ttl)).all():
+        stale.status = "expired"
+        if stale.channel_ref and hasattr(channel, "delete_message"):
+            channel.delete_message(stale.channel_ref)
+        event(s, "approval_expired", "draft", stale.id)
+    # Strongest story first among what remains, then the most recently approved.
+    drafts = s.scalars(
+        select(Draft).join(Story, Draft.story_id == Story.id)
+        .where(Draft.status.in_(("approved", "approved_night")))
+        .order_by(Story.score.desc(), Draft.decided_at.desc())
+    ).all()
     done: list[Post] = []
     manual = getattr(publisher, "name", "") == "manual"
     api = getattr(publisher, "name", "") == "x"

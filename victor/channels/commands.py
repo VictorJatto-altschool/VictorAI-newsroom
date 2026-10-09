@@ -31,7 +31,7 @@ HELP = """Commands:
 /note <text> - save a tool note for educational posts
 /growth <followers> <verified_impressions_90d> - record numbers from X analytics
 /digest - weekly summary now
-/next - when the next hand-off slot opens and how many posts are queued
+/next - when the next slot opens, and the strongest story trending right now (drafted on the spot if needed)
 /clearchat - delete every bot message except ready posts waiting for your Posted tap
 /story <link> [angle] - draft a story you found yourself; an X post link is quoted so its video plays
 Reply to a draft card with new text to edit it. Buttons: Approve, Approve for night, Rewrite, Reject."""
@@ -463,11 +463,30 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
         tg.notify(f"Cleared {n} messages. Ready posts waiting for your Posted tap were kept.")
     elif cmd == "/next":
         from ..intelligence.rules import next_slot
-        from ..pipeline import _history
+        from ..pipeline import _history, draft_one
 
         when = next_slot(now, settings.limits, _history(s, settings, now), settings.automation.get("timezone", "UTC"))
-        queued = s.scalar(select(func.count(Draft.id)).where(Draft.status.in_(("approved", "approved_night"))))
-        tg.notify(f"Next hand-off slot: {_local(settings, when) if when > now else 'now'}. Queued and approved: {queued}.")
+        slot = _local(settings, when) if when > now else "now"
+        # The strongest story of the last few hours, whatever happens to be trending right now.
+        fresh = now - timedelta(hours=3)
+        top = s.scalars(select(Story).where(Story.last_updated_at >= fresh, Story.status.in_(("discovered", "drafted")),
+                                            Story.classification.in_(("breaking", "hot", "trending")))
+                        .order_by(Story.score.desc()).limit(5)).all()
+        pick = None
+        for st_ in top:
+            live = next((d for d in st_.drafts if d.status == "pending"), None)
+            if live or st_.status == "discovered":
+                pick = (st_, live)
+                break
+        if not pick:
+            tg.notify(f"Next slot: {slot}. Nothing new is trending strongly in the last 3 hours; the next cycle will bring fresh cards.")
+        else:
+            st_, live = pick
+            if live is None:
+                live = draft_one(s, settings, st_, now, channel=tg)
+                tg.notify(f"Next slot: {slot}. Strongest story right now ({st_.score:.0f}): {st_.title[:80]}. Fresh card sent above.")
+            else:
+                tg.notify(f"Next slot: {slot}. Strongest story right now ({st_.score:.0f}): {st_.title[:80]}. Its card is #{live.id}; approve it to take the slot.")
     elif cmd == "/story":
         from ..collect.manual import ingest_url
         from ..pipeline import draft_one
