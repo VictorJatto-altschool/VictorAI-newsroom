@@ -433,7 +433,7 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
                      hist=hist, paused=paused, mode=mode, night_cap=night_cap)
         route = dec.route if dec.allowed else "blocked"
         draft = Draft(
-            story=st, text=out.text, reply_text=_reply_text(views, media_refs), why=out.why,
+            story=st, text=out.text, reply_text=_reply_text(views, media_refs), why=out.why, suggested_take=out.suggested_take,
             reason=out.reason, provider=out.provider, model=out.model, source_item_ids=[v.item_id for v in views],
             media=media, checks=checks, checks_passed=checks["passed"], route=route, dev_mode=settings.env.dev_mode,
             status="approved" if route == "autonomous" else ("blocked" if route == "blocked" else "pending"),
@@ -444,6 +444,7 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
         event(s, "draft_created", "draft", draft.id, story_id=st.id, route=route, reasons=dec.reasons, score=st.score)
         card = DraftCard(
             draft_id=draft.id, story_title=st.title, text=out.text, why=out.why, reason=out.reason, score=st.score,
+            suggested_take=out.suggested_take,
             classification=st.classification, sources=[(v.publisher, v.url) for v in views], media=media,
             checks=checks, route=route, dev_mode=settings.env.dev_mode, tags=dec.reasons,
         )
@@ -486,6 +487,7 @@ def draft_one(s: Session, settings: Settings, story: Story, now: datetime, provi
                  hist=hist, paused=paused, mode=mode)
     route = "review" if dec.allowed else "blocked"  # operator-submitted stories are never autonomous
     draft = Draft(story=story, text=out.text, reply_text=_reply_text(views, media_refs), why=out.why, reason=out.reason,
+                  suggested_take=out.suggested_take,
                   provider=out.provider, model=out.model, source_item_ids=[v.item_id for v in views], media=media,
                   checks=checks, checks_passed=checks["passed"], route=route, dev_mode=settings.env.dev_mode,
                   status="blocked" if route == "blocked" else "pending")
@@ -495,7 +497,8 @@ def draft_one(s: Session, settings: Settings, story: Story, now: datetime, provi
     event(s, "draft_created", "draft", draft.id, story_id=story.id, route=route, reasons=dec.reasons + ["operator"])
     card = DraftCard(draft_id=draft.id, story_title=story.title, text=out.text, why=out.why, reason=out.reason,
                      score=story.score, classification=story.classification, sources=[(v.publisher, v.url) for v in views],
-                     media=media, checks=checks, route=route, dev_mode=settings.env.dev_mode, tags=dec.reasons + ["operator"])
+                     media=media, checks=checks, route=route, dev_mode=settings.env.dev_mode, tags=dec.reasons + ["operator"],
+                     suggested_take=out.suggested_take)
     draft.channel_ref = channel.send_draft(card)
     return draft
 

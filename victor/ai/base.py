@@ -15,6 +15,7 @@ class DraftOutput:
     provider: str
     model: str
     raw: str = ""
+    suggested_take: str = ""  # one first-person line the operator can read and retype in their own words
 
 
 class AIProvider(Protocol):
@@ -73,4 +74,5 @@ def parse_draft_json(raw: str, provider: str, model: str) -> DraftOutput:
         provider=provider,
         model=model,
         raw=raw,
+        suggested_take=clean_post_text(str(data.get("suggested_take", "")))[:200],
     )

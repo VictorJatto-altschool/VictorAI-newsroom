@@ -20,6 +20,7 @@ class DraftCard:
     route: str
     dev_mode: bool = True
     tags: list[str] = field(default_factory=list)
+    suggested_take: str = ""
 
 
 class Channel(Protocol):
@@ -45,7 +46,8 @@ def render_card(card: DraftCard) -> str:
         f"{label}DRAFT #{card.draft_id} | {card.classification.upper()} {card.score:.0f} | route: {card.route}\n"
         f"Story: {card.story_title}\n"
         f"\n{card.text}\n\n"
-        f"Why it matters: {card.why}\n"
+        + (f"Suggested take (read it, then type your own words after Approve): {card.suggested_take}\n\n" if card.suggested_take else "")
+        + f"Why it matters: {card.why}\n"
         f"Reason chosen: {card.reason}\n"
         f"Media: {media_line}\n"
         f"Checks: {checks}\n"

@@ -27,7 +27,9 @@ SYSTEM_PREFIX = (
     "pick the one an informed reader is most likely to stop on, then write the post under it. "
     "Respond with a JSON object: "
     '{"post": string within the hard limit, "why_it_matters": one sentence, '
-    '"reason": one sentence on why this story is worth posting, "hook_type": one of number|contrast|stakes|question|scoop}.'
+    '"reason": one sentence on why this story is worth posting, "hook_type": one of number|contrast|stakes|question|scoop, '
+    '"suggested_take": one first-person line, under 120 characters, that the account owner could say about this: an opinion, '
+    'a prediction, or what it means for their audience. Specific, not generic. The owner will retype it in their own words.}'
 )
 
 

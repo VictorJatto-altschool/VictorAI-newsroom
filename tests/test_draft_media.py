@@ -10,8 +10,8 @@ SRC = [SourceView(1, "OpenAI", 1, "OpenAI releases GPT-6", "GPT-6 has a 2M token
 
 
 def test_parse_draft_json_tolerates_prose():
-    out = parse_draft_json('Sure! {"post": "NEW: thing", "why_it_matters": "x", "reason": "y"} done', "p", "m")
-    assert out.text == "NEW: thing" and out.provider == "p"
+    out = parse_draft_json('Sure! {"post": "NEW: thing", "why_it_matters": "x", "reason": "y", "suggested_take": "I think this is the real shift."} done', "p", "m")
+    assert out.text == "NEW: thing" and out.provider == "p" and out.suggested_take == "I think this is the real shift."
 
 
 def test_parse_draft_json_rejects_garbage():

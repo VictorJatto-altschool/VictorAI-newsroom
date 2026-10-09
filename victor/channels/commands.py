@@ -118,6 +118,8 @@ def _handle_callback(s: Session, settings: Settings, tg, cq: dict, now: datetime
             tg.answer_callback(cq["id"], "One line from you first")
             prompt = (f"Draft #{d.id}: type ONE line of your own take (what you think, or why it matters to your audience). "
                       f"It goes into the post above the link and is what makes the post yours under X's Original Content rules.")
+            if (d.suggested_take or "").strip():
+                prompt += f"\n\nSuggestion to rephrase in your own words: {d.suggested_take.strip()}"
             if hasattr(tg, "send_with_buttons"):
                 tg.send_with_buttons(prompt, [[{"text": "Post without my take", "callback_data": f"skiptake:{d.id}"}]])
             else:
@@ -187,7 +189,7 @@ def _send_card(tg, settings: Settings, d: Draft, views: list[SourceView], tags: 
     card = DraftCard(
         draft_id=d.id, story_title=d.story.title, text=d.text, why=d.why, reason=d.reason, score=d.story.score,
         classification=d.story.classification, sources=[(v.publisher, v.url) for v in views], media=d.media,
-        checks=d.checks, route=d.route, dev_mode=settings.env.dev_mode, tags=tags,
+        checks=d.checks, route=d.route, dev_mode=settings.env.dev_mode, tags=tags, suggested_take=d.suggested_take or "",
     )
     d.channel_ref = tg.send_draft(card)
 
@@ -202,6 +204,7 @@ def new_version(s: Session, settings: Settings, old: Draft, text: str, why: str,
     checks = run_checks(text, views, settings.drafting, check_links=check_links)
     d = Draft(
         story=old.story, text=text, reply_text=old.reply_text, why=why, reason=reason, provider=provider, model=model,
+        suggested_take=old.suggested_take or "",
         source_item_ids=old.source_item_ids, media=old.media, checks=checks, checks_passed=checks["passed"],
         route="review", status="pending", version=old.version + 1, dev_mode=settings.env.dev_mode,
     )

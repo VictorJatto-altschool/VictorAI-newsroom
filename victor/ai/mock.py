@@ -24,6 +24,7 @@ class MockProvider:
                 "post": post[:280],
                 "why_it_matters": "Placeholder from mock provider.",
                 "reason": f"Mock draft. Story had {count} source(s); first reported by {publisher}.",
+                "suggested_take": "[DEV MODE] I think this matters more for small teams than for the big labs.",
             }
         )
 
