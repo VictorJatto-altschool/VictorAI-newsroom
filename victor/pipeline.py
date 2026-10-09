@@ -641,6 +641,8 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
             if link:
                 text = f"{d.text.rstrip()}\n\n{link}"
                 reply = ""
+            if media.get("attribution"):  # a CC photo must carry its credit; the credit travels with the post
+                text = f"{text.rstrip()}\n{media['attribution']}"
         req = PublishRequest(idempotency_key=key, text=text, reply_text=reply,
                              quote_url=media.get("url", "") if media.get("mode") == "quote" else "",
                              media_path=media.get("path", "") if media.get("mode") in ("upload", "render") else "")

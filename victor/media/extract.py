@@ -7,7 +7,8 @@ X_POST_RE = re.compile(r"https?://(?:www\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,1
 YT_RE = re.compile(r"https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([A-Za-z0-9_-]{11})")
 IMG_RE = re.compile(r"<img[^>]+src=[\"']([^\"']+)[\"']", re.I)
 
-PUBLIC_DOMAIN_HOSTS = ("nasa.gov", "images-assets.nasa.gov", "esa.int", "noaa.gov", "nih.gov", "usgs.gov")
+# Works of the US federal government are public domain; whitehouse.gov photos and video stills included.
+PUBLIC_DOMAIN_HOSTS = ("nasa.gov", "images-assets.nasa.gov", "esa.int", "noaa.gov", "nih.gov", "usgs.gov", "whitehouse.gov")
 
 
 def find_media(raw_html: str, text: str, publisher_host: str = "") -> list[dict]:

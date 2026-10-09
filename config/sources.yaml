@@ -26,6 +26,8 @@ sources:
   - {name: NASA YouTube,           kind: youtube, x_handle: NASA,           url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCLA_DiR1FfKNvjuUpBHmylQ", tier: 1, category: space, interval_minutes: 60}
   - {name: SpaceX YouTube,         kind: youtube, x_handle: SpaceX,         url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCtI0Hodo5o5dUb67FeUjDeA", tier: 1, category: space, interval_minutes: 60}
   - {name: The Verge YouTube,      kind: youtube,                           url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCddiUEpeqJcYeBxX1IVBKvQ", tier: 3, category: tech, interval_minutes: 120}
+  - {name: White House News,       kind: rss,     x_handle: WhiteHouse,     url: https://www.whitehouse.gov/news/feed/,                      tier: 1, category: leaders, interval_minutes: 30}
+  - {name: White House YouTube,    kind: youtube, x_handle: WhiteHouse,     url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCYxRlFDqcWM4y7FfpiAN3KQ", tier: 1, category: leaders, interval_minutes: 60}
   # --- Tier 2/3: press ---
   - {name: TechCrunch AI,          kind: rss, url: https://techcrunch.com/category/artificial-intelligence/feed/,       tier: 3, category: ai_models}
   - {name: The Verge AI,           kind: rss, url: https://www.theverge.com/rss/ai-artificial-intelligence/index.xml,  tier: 3, category: ai_models}
