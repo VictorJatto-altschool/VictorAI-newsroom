@@ -11,7 +11,7 @@ overnight_rule:
   night_cap: 2               # max autonomous posts per window
   min_tier1_sources: 1
   min_other_sources: 2
-  allowed_categories: [ai_models, ai_tools, research, space, product_launch]
+  allowed_categories: [ai_models, ai_tools, research, space, product_launch, robotics]
   blocked_keywords: [lawsuit, sues, layoff, layoffs, fired, breach, hack, hacked, exploit, allegation, alleged, rumor, rumour, leak, leaked, election, senate, congress, president, minister, parliament, war, strike]
 
 limits:
@@ -46,6 +46,7 @@ scoring:
     cybersecurity: 0.6
     tech: 0.6
     leaders: 0.9                 # what founders and CEOs did or said today
+    robotics: 0.85               # humanoids, industrial robots, lab demos
     business: 0.6
     other: 0.3
 

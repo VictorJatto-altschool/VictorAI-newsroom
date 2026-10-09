@@ -52,6 +52,37 @@ sources:
   - {name: Leaders Trump tech,       kind: gnews, query: "Trump (AI OR SpaceX OR NASA OR semiconductor OR TikTok OR \"Elon Musk\")",  tier: 4, category: leaders}
   - {name: Leaders AI founders,      kind: gnews, query: "(Mistral OR Perplexity OR \"Scale AI\" OR Cursor OR Databricks) CEO OR founder", tier: 4, category: leaders}
   - {name: Google News Big Tech,     kind: gnews, query: "(Apple OR Google OR Microsoft OR Amazon OR Meta OR Tesla OR NVIDIA) announces",  tier: 4, category: business}
+  # --- Worldwide: AI companies, robotics, space, chips (verified 2026-10-09) ---
+  - {name: Apple Newsroom,         kind: rss,     x_handle: Apple,          url: https://www.apple.com/newsroom/rss-feed.rss,              tier: 1, category: tech}
+  - {name: Amazon News,            kind: rss,     x_handle: amazon,         url: https://www.aboutamazon.com/news/rss,                     tier: 1, category: tech}
+  - {name: Samsung Newsroom,       kind: rss,     x_handle: Samsung,        url: https://news.samsung.com/global/feed,                     tier: 1, category: tech, interval_minutes: 60}
+  - {name: MIT News AI,            kind: rss,                               url: https://news.mit.edu/topic/mitartificial-intelligence2-rss.xml, tier: 1, category: research, interval_minutes: 120}
+  - {name: ESA Top News,           kind: rss,     x_handle: esa,            url: https://www.esa.int/rssfeed/TopNews,                      tier: 1, category: space, interval_minutes: 60}
+  - {name: ESA Space Science,      kind: rss,     x_handle: esascience,     url: https://www.esa.int/rssfeed/Our_Activities/Space_Science, tier: 1, category: space, interval_minutes: 120}
+  - {name: IEEE Spectrum,          kind: rss,                               url: https://spectrum.ieee.org/feeds/feed.rss,                  tier: 2, category: tech, interval_minutes: 60}
+  - {name: IEEE Spectrum Robotics, kind: rss,                               url: https://spectrum.ieee.org/feeds/topic/robotics.rss,        tier: 2, category: robotics, interval_minutes: 60}
+  - {name: SpaceNews,              kind: rss,                               url: https://spacenews.com/feed/,                               tier: 3, category: space}
+  - {name: The Robot Report,       kind: rss,                               url: https://www.therobotreport.com/feed/,                      tier: 3, category: robotics, interval_minutes: 60}
+  - {name: TechCrunch Robotics,    kind: rss,                               url: https://techcrunch.com/category/robotics/feed/,            tier: 3, category: robotics, interval_minutes: 60}
+  - {name: TechCrunch Startups,    kind: rss,                               url: https://techcrunch.com/category/startups/feed/,            tier: 3, category: business, interval_minutes: 60}
+  - {name: Ars Technica Science,   kind: rss,                               url: https://feeds.arstechnica.com/arstechnica/science,         tier: 3, category: science, interval_minutes: 60}
+  - {name: Boston Dynamics YouTube, kind: youtube, x_handle: BostonDynamics, url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC7vVhkEfw4nOGp8TyDk7RcQ", tier: 1, category: robotics, interval_minutes: 60}
+  - {name: Figure YouTube,         kind: youtube, x_handle: Figure_robot,   url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCYlq-KmwPjc1DtsGmthFqSQ", tier: 1, category: robotics, interval_minutes: 60}
+  - {name: Unitree YouTube,        kind: youtube, x_handle: UnitreeRobotics, url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCsMbp4V8oxzHCMdOUP-3oWw", tier: 1, category: robotics, interval_minutes: 60}
+  - {name: Blue Origin YouTube,    kind: youtube, x_handle: blueorigin,     url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCVxTHEKKLxNjGcvVaZindlg", tier: 1, category: space, interval_minutes: 60}
+  - {name: Tesla YouTube,          kind: youtube, x_handle: Tesla,          url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC5WjFrtBdufl6CZojX3D8dQ", tier: 1, category: tech, interval_minutes: 60}
+  - {name: IBM Technology YouTube, kind: youtube, x_handle: IBM,            url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCKWaEZ-_VweaEx1j62do_vQ", tier: 1, category: ai_tools, interval_minutes: 120}
+  - {name: Amazon News YouTube,    kind: youtube, x_handle: amazon,         url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCzE5rz2KHTFYAkmMksUpPLA", tier: 1, category: tech, interval_minutes: 120}
+  - {name: Apple YouTube,          kind: youtube, x_handle: Apple,          url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCE_M8A5yxnLfW0KghEeajjw", tier: 1, category: tech, interval_minutes: 120}
+  - {name: Intel YouTube,          kind: youtube, x_handle: intel,          url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCk7SjrXVXAj8m8BLgzh6dGA", tier: 1, category: tech, interval_minutes: 120}
+  - {name: AMD YouTube,            kind: youtube, x_handle: AMD,            url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCHQDjDDW8w2RieO-IuqYlyg", tier: 1, category: tech, interval_minutes: 120}
+  - {name: Google News robotics,   kind: gnews, query: "humanoid robot OR robotics (Figure OR Optimus OR Unitree OR \"Boston Dynamics\" OR 1X OR Agility OR \"Physical Intelligence\")", tier: 4, category: robotics}
+  - {name: Google News space world, kind: gnews, query: "(\"Rocket Lab\" OR ISRO OR JAXA OR CNSA OR ESA OR \"Blue Origin\" OR Starship OR Artemis) launch OR mission", tier: 4, category: space}
+  - {name: Google News AI Asia,    kind: gnews, query: "(DeepSeek OR Qwen OR Alibaba OR Baidu OR Tencent OR ByteDance OR Moonshot OR Zhipu OR Samsung OR SoftBank) AI model OR launch", tier: 4, category: ai_models}
+  - {name: Google News AI Europe,  kind: gnews, query: "(Mistral OR \"Aleph Alpha\" OR DeepL OR \"Black Forest Labs\" OR \"Stability AI\" OR Wayve OR \"Helsing\") AI", tier: 4, category: ai_models}
+  - {name: Google News AI emerging, kind: gnews, query: "AI startup (Nigeria OR Kenya OR \"South Africa\" OR India OR Brazil OR UAE OR Singapore) launch OR funding", tier: 4, category: business, interval_minutes: 60}
+  - {name: Google News chips,      kind: gnews, query: "(TSMC OR Intel OR AMD OR Qualcomm OR Arm OR Samsung OR Micron) AI chip", tier: 4, category: tech, interval_minutes: 60}
+  - {name: Google News AI companies, kind: gnews, query: "(xAI OR Anthropic OR Cohere OR Perplexity OR Runway OR ElevenLabs OR Midjourney OR Cursor OR Databricks OR \"Scale AI\") announces OR launches OR releases", tier: 4, category: ai_tools}
   - {name: Hacker News Front,      kind: hn,    url: "https://hnrss.org/frontpage?points=100",                        tier: 4, category: tech}
   - {name: Hugging Face Trending,  kind: hf,    url: "https://huggingface.co/api/models?sort=trendingScore&direction=-1&limit=20", tier: 4, category: ai_models, interval_minutes: 120}
   - {name: Reddit r/artificial,    kind: reddit, url: "https://www.reddit.com/r/artificial/top/.rss?t=day",           tier: 4, category: ai_models, interval_minutes: 120}
