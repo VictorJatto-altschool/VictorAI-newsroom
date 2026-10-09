@@ -14,6 +14,10 @@ class MockProvider:
             title = _between(user, "TITLE:", "\n") or "Untitled"
             return json.dumps({"posts": [f"[DEV MODE] {title[:80]}", "Fact one from the sources.", "Fact two from the sources.",
                                          "Why it matters: pending real provider. What would you do with it?"]})
+        if user.startswith("CONNECT REQUEST"):
+            angle = _between(user, "ANGLE:", "\n") or "introduce yourself"
+            return json.dumps({"post": f"[DEV MODE] This account reads AI, science and space news all day. Question of the day: {angle[:120]}. "
+                                       "Reply and I follow and talk back to everyone in the field."})
         if user.startswith("REPLY REQUEST"):
             n = len(re.findall(r"^STORY \d+$", user, re.M))
             return json.dumps({"replies": [f"[DEV MODE] Reply {i + 1}: a fact from the sources. What would change your mind?" for i in range(n)]})

@@ -35,6 +35,7 @@ HELP = """Commands:
 /thread [card number] [parts] - a ready-to-post thread on that card's story, or on the strongest story of the day
 /engage [n] - the strongest stories of the day with a reply drafted for each, to post under the accounts that broke them
 /people - one-tap X searches for accounts in the niche to follow, plus the follow-back routine
+/connect [topic] - a fresh community post inviting people in the niche to introduce themselves and connect; post it any time
 /clearchat - delete every bot message except ready posts waiting for your Posted tap
 /story <link> [angle] - draft a story you found yourself; an X post link is quoted so its video plays
 Reply to a draft card with new text to edit it. Buttons: Approve, Approve for night, Rewrite, Reject."""
@@ -357,6 +358,39 @@ def send_engage(s: Session, settings: Settings, tg, now: datetime, n: int = 5, p
               "that follows or replies for you: X suspends for that.")
     event(s, "engage_sent", count=len(picked), by="telegram")
     return len(picked)
+
+
+def send_connect(s: Session, settings: Settings, tg, now: datetime, note: str = "", provider=None) -> str | None:
+    """/connect [topic]: a community post that invites people in the niche to reply and connect, ready to post.
+
+    The angle rotates on every call and the last openings are passed back so no two posts read alike. It is not
+    counted against the news limits: it is the user's own voice, posted whenever they like."""
+    import json as _json
+
+    from ..ai.connect import ANGLES, generate_connect_post
+    from ..pipeline import event, get_state, set_state
+    from ..publish.intent import intent_url
+
+    count = int(get_state(s, "connect_count", "0"))
+    angle = ANGLES[count % len(ANGLES)]
+    recent = _json.loads(get_state(s, "connect_recent", "[]"))
+    provider = provider or pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
+    max_chars = int(settings.drafting.get("max_chars", 280))
+    try:
+        text = generate_connect_post(provider, settings.voice, angle, max_chars=max_chars, note=note, recent=recent)
+    except Exception as e:  # noqa: BLE001
+        tg.notify(f"Could not write the connect post: {type(e).__name__}: {str(e)[:120]}. Try /connect again.")
+        return None
+    set_state(s, "connect_count", str(count + 1))
+    set_state(s, "connect_recent", _json.dumps(([text[:60]] + recent)[:8]))
+    event(s, "connect_generated", angle=angle, by="telegram")
+    body = f"CONNECT POST ({len(text)} chars)\n\n{text}\n\nBest time: 13:00 to 22:00 Lagos. Reply to everyone who answers within the hour; that is what makes it work."
+    buttons = [[{"text": "Open in X", "url": intent_url(text)}], [{"text": "Copy post", "copy_text": {"text": text[:256]}}]]
+    if hasattr(tg, "send_with_buttons"):
+        tg.send_with_buttons(body[:4000], buttons)
+    else:
+        tg.notify(body[:4000])
+    return text
 
 
 def people_message(settings: Settings) -> tuple[str, list[list[dict]]]:
@@ -682,6 +716,8 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
     elif cmd == "/engage":
         n = int(arg.split()[0]) if arg.split() and arg.split()[0].isdigit() else 5
         send_engage(s, settings, tg, now, n=max(1, min(10, n)))
+    elif cmd == "/connect":
+        send_connect(s, settings, tg, now, note=arg)
     elif cmd == "/people":
         text, buttons = people_message(settings)
         if hasattr(tg, "send_with_buttons"):

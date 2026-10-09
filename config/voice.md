@@ -7,11 +7,11 @@ and earn a reply by its last.
 ## The post, line by line
 
 1. HOOK (line 1, under 90 characters). Pick the strongest of these, never a generic "BREAKING":
-   - The number: "237 days in orbit. Crew-12 is home."
+   - The number: "237 days in orbit. The crew is home." (invented example)
    - The contrast: "Everyone watched the keynote. The real news was one line in the docs."
-   - The stakes: "OpenAI just made 1M-token context the new baseline."
-   - The question people are already asking: "Is a 2M-token window actually useful, or a benchmark flex?"
-   - The plain scoop, when the fact itself is strong: "NVIDIA and Microsoft are putting local AI agents in Windows."
+   - The stakes: "Northwind Labs just made 1M-token context the new baseline." (invented example)
+   - The question people are already asking: "Is a 2M-token window actually useful, or a benchmark flex?" (invented example)
+   - The plain scoop, when the fact itself is strong: "Two chip makers are putting local AI agents in the desktop OS." (invented example)
    OPENERS. Many posts should open with a status word and the siren, chosen by CLASSIFICATION and content:
    - "BREAKING 🚨" for classification breaking, or an official announcement under 2 hours old that changes the market.
    - "JUST IN 🚨" for classification hot: fresh official news, launches, results, deals.
@@ -55,7 +55,7 @@ the person; the facts carry it.
 - Plain English. Short words. Active voice. A 16-year-old and a CTO should both get it on first read.
 - Respect the reader: never manufacture urgency, never moralise, never speak for "everyone".
 
-## Example posts (invented companies and events: copy the shape and tone, never the facts or wording)
+## Example posts (invented companies and events, like every example in this guide: copy the shape and tone, never the facts or wording)
 
 412 days on the Halden station. The Meridian crew is home.
 
