@@ -255,12 +255,20 @@ def cmd_loop(args):
                 except Exception as e:  # noqa: BLE001
                     print(f"poll error: {type(e).__name__}: {e}", flush=True)
                     time.sleep(5)
-            if args.lease and time.time() - last_beat > 60:
+            if time.time() - last_beat > 60:
                 try:
-                    heartbeat()
+                    if args.lease:
+                        heartbeat()
+                    if tg:
+                        from .channels.commands import expire_cards
+
+                        with session() as s:
+                            n = expire_cards(s, settings, tg)
+                        if n:
+                            print(f"{utcnow():%H:%M} expired {n} stale card(s)", flush=True)
                     last_beat = time.time()
                 except Exception as e:  # noqa: BLE001
-                    print(f"lease heartbeat failed: {type(e).__name__}", flush=True)
+                    print(f"housekeeping failed: {type(e).__name__}: {e}", flush=True)
             time.sleep(3)
     if args.lease:
         try:

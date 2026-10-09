@@ -171,14 +171,47 @@ def _handle_callback(s: Session, settings: Settings, tg, cq: dict, now: datetime
         d.status, d.decided_at = "rejected", now
         d.story.status = "skipped"
         event(s, "draft_rejected", "draft", d.id, by="telegram")
-        tg.mark(msg_id, "Rejected")
         tg.answer_callback(cq["id"], "Rejected")
+        _remove_card(tg, msg_id, "Rejected")
     elif action == "rewrite":
         tg.answer_callback(cq["id"], "Rewriting")
         new = rewrite_draft(s, settings, d, now, provider=provider, tg=tg)
-        tg.mark(msg_id, f"Superseded by #{new.id}" if new else "Rewrite failed")
+        if new:
+            _remove_card(tg, msg_id, f"Superseded by #{new.id}")
+        else:
+            tg.mark(msg_id, "Rewrite failed")
     else:
         tg.answer_callback(cq["id"])
+
+
+def _remove_card(tg, message_id: str | None, fallback_label: str) -> None:
+    """Delete a card that no longer needs attention; if the channel cannot delete, mark it instead."""
+    if hasattr(tg, "delete_message") and tg.delete_message(message_id):
+        return
+    tg.mark(message_id, fallback_label)
+
+
+def expire_cards(s: Session, settings: Settings, tg, now: datetime | None = None) -> int:
+    """Pending cards older than the TTL are removed from the chat and marked expired, so the chat shows only
+    what is current. Hand-offs waiting for a Posted tap are never expired."""
+    now = now or _utcnow()
+    ttl = int((settings.raw.get("telegram") or {}).get("card_ttl_minutes", 30))
+    if ttl <= 0:
+        return 0
+    cutoff = now - timedelta(minutes=ttl)
+    rows = s.scalars(select(Draft).where(Draft.status == "pending", Draft.created_at < cutoff)).all()
+    n = 0
+    for d in rows:
+        if d.channel_ref and hasattr(tg, "delete_message"):
+            tg.delete_message(d.channel_ref)
+        d.status = "expired"
+        d.decided_at = now
+        n += 1
+    if n:
+        from ..pipeline import event
+
+        event(s, "cards_expired", count=n, ttl_minutes=ttl)
+    return n
 
 
 def _views_for(d: Draft) -> list[SourceView]:

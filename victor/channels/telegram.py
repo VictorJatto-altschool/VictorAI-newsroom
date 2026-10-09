@@ -96,6 +96,11 @@ class TelegramChannel:
             return None
         return str(data["result"]["message_id"])
 
+    def delete_message(self, message_id: str | None) -> bool:
+        if not message_id:
+            return False
+        return bool(self._call("deleteMessage", chat_id=self.chat_id, message_id=int(message_id)))
+
     def mark(self, message_id: str | None, label: str) -> None:
         """Replace the buttons under a card with a single disabled-looking label."""
         if not message_id:

@@ -101,6 +101,9 @@ digest:
   weekday: 0                   # Monday
   hour: 8                      # local time
 
+telegram:
+  card_ttl_minutes: 30         # a pending card nobody acted on in this long is deleted from the chat (0 = keep forever)
+
 dashboard:
   enabled: true                # writes docs/index.html after each run (serve with GitHub Pages, free)
   show_drafts: false           # the repo is public; keep draft text out of the page unless you want it there
