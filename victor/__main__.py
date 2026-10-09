@@ -219,8 +219,9 @@ def cmd_loop(args):
             try:
                 with session() as s:
                     set_state(s, "loop_lease", "")
+                    set_state(s, "cycle_lock", "")  # a cycle cut short must not block the successor for 6 minutes
             finally:
-                print("lease released on shutdown", flush=True)
+                print("lease and cycle lock released on shutdown", flush=True)
                 raise SystemExit(0)
 
         signal.signal(signal.SIGTERM, _release_and_exit)
@@ -235,14 +236,17 @@ def cmd_loop(args):
     print(f"loop: cycle every {args.minutes} min; Telegram {'on' if tg else 'off'}"
           f"{f'; stops after {args.max_minutes} min' if stop_at else ''}; Ctrl+C to stop", flush=True)
     while stop_at is None or time.time() < stop_at:
+        skipped = False
         try:
             stats = run_once(settings)
+            skipped = bool(stats.get("skipped"))
             print(f"{utcnow():%H:%M} cycle ok: {stats.get('items_new', 0)} new items, {stats.get('drafts_made', 0)} drafts, "
                   f"{stats.get('posts_manual', 0)} handed off, {stats.get('posts_published', 0)} published"
-                  + (" (skipped: another cycle was running)" if stats.get("skipped") else ""), flush=True)
+                  + (" (skipped: another cycle was running)" if skipped else ""), flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"{utcnow():%H:%M} cycle FAILED: {type(e).__name__}: {e}", flush=True)
-        deadline = time.time() + args.minutes * 60
+        # A skipped cycle (stale lock from an instance that was killed mid-cycle) retries in a minute, not in 15.
+        deadline = time.time() + (60 if skipped else args.minutes * 60)
         while time.time() < deadline and (stop_at is None or time.time() < stop_at):
             if tg:
                 try:

@@ -808,7 +808,7 @@ def run_once(settings: Settings, now: datetime | None = None, **overrides: Any) 
             _release_cycle_lock()
 
 
-CYCLE_LOCK_MINUTES = 6
+CYCLE_LOCK_MINUTES = 4  # a cycle takes about a minute; anything older than this is a dead holder
 
 
 def _acquire_cycle_lock(now: datetime) -> bool:
