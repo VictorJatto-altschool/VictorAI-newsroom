@@ -1,7 +1,9 @@
 """Telegram channel: draft cards with inline buttons, notifications, and update polling (no server needed)."""
 from __future__ import annotations
 
+import html as _html
 import logging
+import re
 import time
 from pathlib import Path
 
@@ -47,6 +49,14 @@ def draft_keyboard(draft_id: int, suggested_take: str = "") -> dict:
     return {"inline_keyboard": rows}
 
 
+_TAGS = re.compile(r"</?(pre|code|b|i|u|s|a|tg-spoiler)[^>]*>")
+
+
+def _strip_html(text: str) -> str:
+    """Plain-text fallback for a message Telegram rejected as HTML."""
+    return _html.unescape(_TAGS.sub("", text))
+
+
 class TelegramChannel:
     name = "telegram"
 
@@ -80,19 +90,25 @@ class TelegramChannel:
     def notify(self, text: str) -> None:
         self._call("sendMessage", chat_id=self.chat_id, text=text[:4000], disable_web_page_preview=True)
 
-    def send_with_buttons(self, text: str, buttons: list[list[dict]]) -> str | None:
+    supports_html = True  # callers may send HTML (escaped text, <pre> blocks that copy with one tap); see _strip_html
+
+    def send_with_buttons(self, text: str, buttons: list[list[dict]], html: bool = False) -> str | None:
+        extra = {"parse_mode": "HTML"} if html else {}
         res = self._call("sendMessage", chat_id=self.chat_id, text=text[:4000], disable_web_page_preview=True,
-                         reply_markup={"inline_keyboard": buttons})
+                         reply_markup={"inline_keyboard": buttons}, **extra)
+        if res is None and html:  # a bad entity must not lose the post: resend as plain text
+            return self.send_with_buttons(_strip_html(text), buttons)
         return str(res["message_id"]) if res else None
 
-    def edit_with_buttons(self, message_id: str | None, text: str, buttons: list[list[dict]]) -> str | None:
+    def edit_with_buttons(self, message_id: str | None, text: str, buttons: list[list[dict]], html: bool = False) -> str | None:
         """Rewrite an existing message in place (the draft card becomes the ready post). Falls back to a new message."""
         if message_id:
+            extra = {"parse_mode": "HTML"} if html else {}
             res = self._call("editMessageText", chat_id=self.chat_id, message_id=int(message_id), text=text[:4000],
-                             disable_web_page_preview=True, reply_markup={"inline_keyboard": buttons})
+                             disable_web_page_preview=True, reply_markup={"inline_keyboard": buttons}, **extra)
             if res:
                 return str(message_id)
-        return self.send_with_buttons(text, buttons)
+        return self.send_with_buttons(text, buttons, html=html)
 
     def send_file(self, path: str, caption: str = "") -> str | None:
         """Send a local image or video so the operator can save it and attach it in the X composer."""

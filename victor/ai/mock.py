@@ -14,6 +14,8 @@ class MockProvider:
             title = _between(user, "TITLE:", "\n") or "Untitled"
             return json.dumps({"posts": [f"[DEV MODE] {title[:80]}", "Fact one from the sources.", "Fact two from the sources.",
                                          "Why it matters: pending real provider. What would you do with it?"]})
+        if user.startswith("PROOFREAD\n"):
+            return json.dumps({"post": user[len("PROOFREAD\n"):]})  # the mock editor finds nothing to fix
         if user.startswith("CONNECT REQUEST"):
             angle = _between(user, "ANGLE:", "\n") or "introduce yourself"
             return json.dumps({"post": f"[DEV MODE] This account reads AI, science and space news all day. Question of the day: {angle[:120]}. "

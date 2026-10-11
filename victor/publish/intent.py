@@ -7,6 +7,7 @@ The operator taps "Posted" afterwards so the newsroom records it and the anti-sp
 """
 from __future__ import annotations
 
+import html
 import logging
 from pathlib import Path
 from urllib.parse import urlencode
@@ -64,32 +65,37 @@ class ManualPublisher:
     def publish(self, req: PublishRequest) -> PublishResult:
         url = intent_url(req.text, req.quote_url)
         d = self.draft_id
-        lines = [f"READY TO POST (draft #{d})" if d else "READY TO POST", "", req.text]
+        html_ok = bool(getattr(self._tg, "supports_html", False))
+        esc = (lambda s: html.escape(s, quote=False)) if html_ok else (lambda s: s)
+        fits = len(req.text) <= COPY_LIMIT
+        # In HTML mode the post sits in a <pre> block: one tap on it copies the whole post, whatever its length.
+        post_block = f"<pre>{esc(req.text)}</pre>" if html_ok else req.text
+        lines = [f"READY TO POST (draft #{d})" if d else "READY TO POST", "", post_block]
+        if html_ok and not fits:
+            lines += ["", "Tap the post above to copy all of it."]
         if req.quote_url:
-            lines += ["", f"Quotes: {req.quote_url} (video plays under your text)"]
+            lines += ["", esc(f"Quotes: {req.quote_url} (video plays under your text)")]
         if req.media_path:
             lines += ["", "Media is in the next message: save it and attach it in the composer."]
         if req.reply_text:
-            lines += ["", "After posting, paste this as the first reply:", req.reply_text]
+            lines += ["", "After posting, paste this as the first reply:", esc(req.reply_text)]
         if self.take_hint:
-            lines += ["", "Your take (copy, change a few words, paste it as the last line in the composer):", self.take_hint]
+            lines += ["", "Your take (copy, change a few words, paste it as the last line in the composer):", esc(self.take_hint)]
         if self.footer:
-            lines += ["", self.footer]
+            lines += ["", esc(self.footer)]
         buttons = [[{"text": "Open in X", "url": url}]]
-        parts = copy_parts(req.text)
-        if len(parts) == 1:
-            buttons.append([{"text": "Copy post", "copy_text": {"text": parts[0]}}])
-        else:
-            buttons.append([{"text": f"Copy {i}/{len(parts)}", "copy_text": {"text": p}} for i, p in enumerate(parts, start=1)])
+        if fits:  # Telegram copy buttons hold 256 characters; longer posts copy from the block above
+            buttons.append([{"text": "Copy post", "copy_text": {"text": req.text}}])
         if self.take_hint:
             buttons.append([{"text": "Copy my take", "copy_text": {"text": self.take_hint[:256]}}])
         if d:
             buttons.append([{"text": "Posted", "callback_data": f"posted:{d}"}, {"text": "Skip", "callback_data": f"skip:{d}"}])
+        kwargs = {"html": True} if html_ok else {}
         ref = None
         if self.message_ref and hasattr(self._tg, "edit_with_buttons"):
-            ref = self._tg.edit_with_buttons(self.message_ref, "\n".join(lines), buttons)  # the card becomes the post
+            ref = self._tg.edit_with_buttons(self.message_ref, "\n".join(lines), buttons, **kwargs)  # the card becomes the post
         elif hasattr(self._tg, "send_with_buttons"):
-            ref = self._tg.send_with_buttons("\n".join(lines), buttons)
+            ref = self._tg.send_with_buttons("\n".join(lines), buttons, **kwargs)
         else:
             self._tg.notify("\n".join(lines) + f"\n\nOpen in X: {url}")
         if req.media_path and Path(req.media_path).exists() and hasattr(self._tg, "send_file"):

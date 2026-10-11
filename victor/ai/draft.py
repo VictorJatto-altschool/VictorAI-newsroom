@@ -160,6 +160,10 @@ def generate(provider: AIProvider, voice: str, title: str, category: str, source
         shorter = parse_draft_json(raw, provider.name, provider.model)
         shorter.reason, shorter.why = out.reason or shorter.reason, out.why or shorter.why
         out = shorter
+    from .proofread import proofread, tidy_punctuation
+
+    out.text = proofread(provider, out.text)
+    out.suggested_take = tidy_punctuation(out.suggested_take or "")
     return out
 
 
