@@ -45,7 +45,8 @@ def test_slot_reminder_sends_strongest_story_once_per_hour(fresh_db, now):
     settings.raw["limits"]["max_drafts_per_run"] = 0
     tg = FakeTelegramAll()
     # collect without drafting so a strong "discovered" story remains for the reminder to pick
-    settings.raw["drafting"]["min_score"] = 999
+    settings.raw["drafting"].update(min_score=999, fallback_min_score=0)
+    settings.raw["limits"]["card_every_minutes"] = 0
     run_once(settings, now, fetcher=make_fetcher(now), provider=MockProvider(), channel=tg, publisher=MockPublisher(), check_links=False)
     settings.raw["drafting"]["min_score"] = 0
     with session() as s:

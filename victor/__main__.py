@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 
@@ -247,6 +247,12 @@ def cmd_loop(args):
             print(f"{utcnow():%H:%M} cycle FAILED: {type(e).__name__}: {e}", flush=True)
         # A skipped cycle (stale lock from an instance that was killed mid-cycle) retries in a minute, not in 15.
         deadline = time.time() + (60 if skipped else args.minutes * 60)
+        try:  # /next and the slot notice quote the real next collection time from this
+            with session() as s:
+                set_state(s, "next_cycle_at", (utcnow() + timedelta(seconds=deadline - time.time())).isoformat())
+                set_state(s, "cycle_minutes", str(args.minutes))
+        except Exception as e:  # noqa: BLE001
+            print(f"could not record next cycle time: {e}", flush=True)
         while time.time() < deadline and (stop_at is None or time.time() < stop_at):
             if tg:
                 try:

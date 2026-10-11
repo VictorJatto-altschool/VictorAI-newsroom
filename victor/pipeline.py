@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
@@ -445,11 +446,6 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
     mode = get_state(s, "mode", settings.automation.get("mode", "approval"))
     night_cap = int(get_state(s, "night_cap", str(settings.overnight["night_cap"])))
     min_score = float(settings.drafting.get("min_score", 0) or 0)
-    eligible = s.scalars(
-        select(Story).where(Story.status == "discovered", Story.classification.in_(("breaking", "hot", "trending")),
-                            Story.score >= min_score, Story.last_updated_at >= now - ACTIVE_WINDOW)
-        .order_by(Story.score.desc())
-    ).all()
     made: list[Draft] = []
     limit = int(settings.limits.get("max_drafts_per_run", 0) or 0)  # 0 = unlimited: the news sets the pace
     every = int(settings.limits.get("card_every_minutes", 0) or 0)
@@ -457,6 +453,26 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
     if every and last_card and (now - datetime.fromisoformat(last_card)).total_seconds() < every * 60:
         stats.update(drafts_made=0, drafts_failed=0, drafts_waiting=True)
         return made  # the format is one card every N minutes; the strongest story is picked when the next slot comes
+    eligible = s.scalars(
+        select(Story).where(Story.status == "discovered", Story.classification.in_(("breaking", "hot", "trending")),
+                            Story.score >= min_score, Story.last_updated_at >= now - ACTIVE_WINDOW)
+        .order_by(Story.score.desc())
+    ).all()
+    floor = float(settings.drafting.get("fallback_min_score", 0) or 0)
+    if not eligible and every and floor:
+        # The slot is open and nothing clears the bar: the strongest recent story goes instead of silence.
+        eligible = s.scalars(
+            select(Story).where(Story.status == "discovered", Story.score >= floor,
+                                Story.classification.in_(("breaking", "hot", "trending", "developing")),
+                                Story.last_updated_at >= now - timedelta(hours=6))
+            .order_by(Story.score.desc()).limit(3)
+        ).all()
+        if eligible:
+            stats["fallback_used"] = True
+    if not eligible and every:
+        _slot_passed_notice(s, settings, channel, now, every)
+        stats.update(drafts_made=0, drafts_failed=0)
+        return made
     recent_openers = [_opener(d.text) for d in s.scalars(select(Draft).order_by(Draft.id.desc()).limit(10)).all()]
     stats.update(drafts_made=0, drafts_failed=0)
     for st in eligible:
@@ -520,6 +536,38 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
         set_state(s, "last_card_at", now.isoformat())
         stats["drafts_made"] += 1
     return made
+
+
+def _slot_passed_notice(s: Session, settings: Settings, channel, now: datetime, every: int) -> None:
+    """Say once per slot that nothing was strong enough, with the next check time, instead of going quiet."""
+    last = get_state(s, "slot_notice_at", "")
+    if last and (now - datetime.fromisoformat(last)).total_seconds() < every * 60:
+        return
+    best = s.scalars(select(Story).where(Story.last_updated_at >= now - timedelta(hours=6), Story.status == "discovered")
+                     .order_by(Story.score.desc()).limit(1)).first()
+    tz = ZoneInfo(settings.automation.get("timezone", "UTC"))
+    nxt = next_card_time(s, settings, now + timedelta(seconds=1)).astimezone(tz)
+    detail = f" Strongest on hand: {best.title[:70]} ({best.score:.0f})." if best else ""
+    channel.notify(f"Slot passed with nothing strong enough to post.{detail} Next check at {nxt:%H:%M}. "
+                   f"Send /story <link> if you have seen something yourself.")
+    set_state(s, "slot_notice_at", now.isoformat())
+
+
+def next_card_time(s: Session, settings: Settings, now: datetime) -> datetime:
+    """When the newsroom will next send a card on its own: the card rhythm, aligned to the collection cycle."""
+    every = int(settings.limits.get("card_every_minutes", 0) or 0)
+    earliest = now
+    last = get_state(s, "last_card_at", "")
+    if every and last:
+        earliest = max(now, datetime.fromisoformat(last) + timedelta(minutes=every))
+    nxt = get_state(s, "next_cycle_at", "")
+    if not nxt:
+        return earliest
+    cycle = datetime.fromisoformat(nxt)
+    step = timedelta(minutes=max(1, int(get_state(s, "cycle_minutes", "15") or 15)))
+    if cycle < earliest:
+        cycle += step * math.ceil((earliest - cycle) / step)
+    return cycle
 
 
 def _auto_handoff(settings: Settings) -> bool:

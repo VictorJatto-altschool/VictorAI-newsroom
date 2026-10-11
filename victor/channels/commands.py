@@ -772,31 +772,39 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
         else:
             tg.notify(text)
     elif cmd == "/next":
-        from ..intelligence.rules import next_slot
-        from ..pipeline import _history, draft_one
+        from ..pipeline import draft_one, next_card_time, set_state
 
-        when = next_slot(now, settings.limits, _history(s, settings, now), settings.automation.get("timezone", "UTC"))
-        slot = _local(settings, when) if when > now else "now"
+        when = next_card_time(s, settings, now)
+        slot = _local(settings, when) if when > now + timedelta(seconds=30) else "now"
         # The strongest story of the last few hours, whatever happens to be trending right now.
         fresh = now - timedelta(hours=3)
         top = s.scalars(select(Story).where(Story.last_updated_at >= fresh, Story.status.in_(("discovered", "drafted")),
-                                            Story.classification.in_(("breaking", "hot", "trending")))
+                                            Story.classification.in_(("breaking", "hot", "trending", "developing")))
                         .order_by(Story.score.desc()).limit(5)).all()
+        # Never a former post: an undrafted story first; only when none is left, point at the card already sent.
         pick = None
-        for st_ in top:
-            live = next((d for d in st_.drafts if d.status == "pending"), None)
-            if live or st_.status == "discovered":
-                pick = (st_, live)
-                break
+        undrafted = next((st_ for st_ in top if st_.status == "discovered"), None)
+        if undrafted is not None:
+            pick = (undrafted, None)
+        else:
+            for st_ in top:
+                live = next((d for d in st_.drafts if d.status in ("pending", "handed_off")), None)
+                if live:
+                    pick = (st_, live)
+                    break
         if not pick:
-            tg.notify(f"Next slot: {slot}. Nothing new is trending strongly in the last 3 hours; the next cycle will bring fresh cards.")
+            tg.notify(f"Next card: {slot}. Nothing is trending strongly in the last 3 hours; if that is still true at {slot}, "
+                      f"the strongest story on hand goes out instead, and you get a note if there is none.")
         else:
             st_, live = pick
             if live is None:
                 live = draft_one(s, settings, st_, now, channel=tg)
-                tg.notify(f"Next slot: {slot}. Strongest story right now ({st_.score:.0f}): {st_.title[:80]}. Fresh card sent above.")
+                set_state(s, "last_card_at", now.isoformat())  # this took the slot; the rhythm counts from here
+                nxt = _local(settings, next_card_time(s, settings, now + timedelta(seconds=1)))
+                tg.notify(f"Strongest story right now ({st_.score:.0f}): {st_.title[:80]}. Sent above. Next card: {nxt}.")
             else:
-                tg.notify(f"Next slot: {slot}. Strongest story right now ({st_.score:.0f}): {st_.title[:80]}. Its card is #{live.id}; approve it to take the slot.")
+                tg.notify(f"Next card: {slot}. Strongest story right now ({st_.score:.0f}): {st_.title[:80]}. "
+                          f"It is already {'with you as a ready post' if live.status == 'handed_off' else 'card #' + str(live.id)}.")
     elif cmd == "/story":
         from ..collect.manual import ingest_url
         from ..pipeline import draft_one
