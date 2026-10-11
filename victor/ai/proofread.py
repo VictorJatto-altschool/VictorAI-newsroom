@@ -12,7 +12,8 @@ log = logging.getLogger(__name__)
 PROOFREAD_SYSTEM = (
     "You are a careful copy editor for posts on X. Fix spelling, grammar, capitalisation and punctuation ONLY. "
     "Keep every fact, number, name, word choice, line break and the overall length exactly as they are. "
-    "Do not add, remove or reorder sentences. Do not change the tone. Do not add emoji, hashtags or URLs. "
+    "Do not add, remove or reorder sentences. Do not change the tone. Keep every emoji exactly where it is; "
+    "do not add emoji, hashtags or URLs. "
     "If the text is already correct, return it unchanged. "
     'Respond with JSON only: {"post": string}'
 )

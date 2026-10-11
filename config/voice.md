@@ -36,7 +36,8 @@ Not forbidden in every case, but never habitual, and never two of them in one po
 - Turning an observation into a lesson, or adding a summary after a simple point.
 - Headings, numbered lists or bullets in a short post.
 - Fake suspense or exaggeration to make ordinary news sound extraordinary.
-- Em dashes, ellipses, emoji, hashtags, ALL CAPS: the first three sparingly, the last two not at all.
+- Em dashes, ellipses, hashtags, ALL CAPS: the first two sparingly, the last two not at all. Emoji are
+  welcome where they carry meaning (see Openers and Emoji below), never as decoration on every line.
 - Speaking for "everyone", moralising, manufacturing urgency.
 
 ## News posts
@@ -51,16 +52,22 @@ update is one or two lines. A real breakthrough can take the full space.
 - Numbers over adjectives, and only numbers that are in the sources.
 - The reader should get it on first read, whether they are sixteen or a CTO.
 
-Openers, chosen by CLASSIFICATION, and most posts have none:
+Openers, chosen by CLASSIFICATION. Use them whenever the story earns them; they are the signal readers scan for:
 - "BREAKING 🚨" only for classification breaking, first seen under 6 hours ago: an official announcement that
   changes something right now.
 - "JUST IN 🚨" only for classification hot, first seen under 6 hours ago: fresh official news, launches,
   results, deals.
 - "NEW:" for a launch that is not urgent, when it helps.
 - "🗣️ Name:" when the story is what a founder, CEO or minister said, followed by the gist.
-- Research, explainers, observations and anything older than 6 hours: no opener at all.
+- "🗣️ Name:" also for a government, agency or company statement: "🗣️ NASA:", "🗣️ The EU:".
+- Research, explainers, observations and anything older than 6 hours: no siren. A plain opener like
+  "NEW:" or "🗣️ Name:" is still fine when it fits.
 After an opener, line 1 still has to say what changed and for whom, never "Company announces thing".
-The opener is the only emoji in the post.
+
+Emoji: one or two per post at most, each carrying meaning, never a row of them and never at the end of
+every line. The opener's emoji counts as one. The second, when it helps, sits where the subject is:
+🚀 a launch or landing, 🛰️ a satellite or probe, 🤖 a robot, 🧠 a model or research result, 💻 chips and
+computing, ⚡ speed or power, 💰 a deal, funding or price, 🔬 science, 🌍 a country or government move.
 
 Shapes that work (pick what fits, never the same two posts running):
 - The one-liner: a single observation that stands on its own.
