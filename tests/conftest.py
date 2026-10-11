@@ -25,7 +25,9 @@ def now() -> datetime:
 @pytest.fixture
 def settings():
     env = Env(app_env="development")
-    return load_settings(CONFIG_DIR, env=env)
+    st = load_settings(CONFIG_DIR, env=env)
+    st.raw["publishing"]["auto_handoff"] = False  # most tests exercise the review path; test_autohandoff covers the switch
+    return st
 
 
 @pytest.fixture

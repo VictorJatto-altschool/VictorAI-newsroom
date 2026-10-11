@@ -16,7 +16,7 @@ from .test_volume import busy_fetcher
 
 def _fmt():
     settings = _settings()
-    settings.raw["publishing"]["prepare_media"] = False
+    settings.raw["publishing"].update(prepare_media=False, auto_handoff=False)  # the Approve path, still supported
     settings.raw["limits"].update(max_drafts_per_run=1, card_every_minutes=30, apply_to_manual=False)
     return settings
 

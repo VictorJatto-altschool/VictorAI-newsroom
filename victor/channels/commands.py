@@ -38,7 +38,7 @@ HELP = """Commands:
 /connect [topic] - a fresh community post inviting people in the niche to introduce themselves and connect; post it any time
 /clearchat - delete every bot message except ready posts waiting for your Posted tap
 /story <link> [angle] - a story you found yourself becomes a ready post at once; an X post link is quoted so its video plays
-Reply to a draft card with new text to edit it. Buttons: Approve, Approve for night, Rewrite, Reject."""
+Every card is a ready post: Open in X, Copy post, Posted, Skip. Reply to it with an X link once posted and it is recorded."""
 
 
 def _utcnow() -> datetime:
@@ -775,14 +775,11 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
             d = draft_one(s, settings, story, now, channel=tg, official_only_quote=False)
             if d is None:
                 tg.notify("Read the link but could not draft it (AI provider failed). Try again.")
-            else:
+            elif d.status == "pending":
                 # A story you sent yourself is already your decision: the card becomes the ready post at once.
-                d.status, d.decided_at = "approved", now
-                s.flush()
-                from ..pipeline import event
+                from ..pipeline import handoff_now
 
-                event(s, "draft_approved", "draft", d.id, by="story_command")
-                _after_approve(s, settings, tg, now)
+                handoff_now(s, settings, d, now, channel=tg, by="story_command")
     else:
         tg.notify("Unknown command. /help")
 

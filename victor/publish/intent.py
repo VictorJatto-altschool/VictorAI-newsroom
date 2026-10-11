@@ -17,6 +17,31 @@ log = logging.getLogger(__name__)
 INTENT_BASE = "https://x.com/intent/post"
 
 
+COPY_LIMIT = 256  # Telegram copy_text buttons hold at most this many characters
+
+
+def copy_parts(text: str, limit: int = COPY_LIMIT) -> list[str]:
+    """Split a post into pieces a Telegram copy button can hold, breaking at blank lines, then lines, then spaces."""
+    text = text.strip()
+    if len(text) <= limit:
+        return [text] if text else [""]
+    parts: list[str] = []
+    rest = text
+    while len(rest) > limit:
+        cut = -1
+        for sep in ("\n\n", "\n", " "):
+            cut = rest.rfind(sep, 0, limit + 1)
+            if cut > 0:
+                break
+        if cut <= 0:
+            cut = limit
+        parts.append(rest[:cut].rstrip())
+        rest = rest[cut:].lstrip()
+    if rest:
+        parts.append(rest)
+    return parts
+
+
 def intent_url(text: str, quote_url: str = "") -> str:
     params = {"text": text}
     if quote_url:
@@ -51,6 +76,11 @@ class ManualPublisher:
         if self.footer:
             lines += ["", self.footer]
         buttons = [[{"text": "Open in X", "url": url}]]
+        parts = copy_parts(req.text)
+        if len(parts) == 1:
+            buttons.append([{"text": "Copy post", "copy_text": {"text": parts[0]}}])
+        else:
+            buttons.append([{"text": f"Copy {i}/{len(parts)}", "copy_text": {"text": p}} for i, p in enumerate(parts, start=1)])
         if self.take_hint:
             buttons.append([{"text": "Copy my take", "copy_text": {"text": self.take_hint[:256]}}])
         if d:

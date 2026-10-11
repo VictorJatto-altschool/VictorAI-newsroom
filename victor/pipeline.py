@@ -512,11 +512,27 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
             classification=st.classification, sources=[(v.publisher, v.url) for v in views], media=media,
             checks=checks, route=route, dev_mode=settings.env.dev_mode, tags=dec.reasons,
         )
-        draft.channel_ref = channel.send_draft(card)
+        if _auto_handoff(settings):
+            handoff_now(s, settings, draft, now, channel=channel, by="newsroom")
+        else:
+            draft.channel_ref = channel.send_draft(card)
         made.append(draft)
         set_state(s, "last_card_at", now.isoformat())
         stats["drafts_made"] += 1
     return made
+
+
+def _auto_handoff(settings: Settings) -> bool:
+    pub = settings.raw.get("publishing", {})
+    return bool(pub.get("auto_handoff", False)) and pub.get("mode", "intent") == "intent"
+
+
+def handoff_now(s: Session, settings: Settings, draft: Draft, now: datetime, channel=None, by: str = "operator") -> None:
+    """Skip the Approve step: the draft is approved on the spot and handed over as a ready post in this same call."""
+    draft.status, draft.decided_at = "approved", now
+    s.flush()
+    event(s, "draft_approved", "draft", draft.id, by=by)
+    publish_approved(s, settings, {}, now, channel=channel, only_draft_id=draft.id)
 
 
 def draft_one(s: Session, settings: Settings, story: Story, now: datetime, provider=None, channel=None,
@@ -564,7 +580,10 @@ def draft_one(s: Session, settings: Settings, story: Story, now: datetime, provi
                      score=story.score, classification=story.classification, sources=[(v.publisher, v.url) for v in views],
                      media=media, checks=checks, route=route, dev_mode=settings.env.dev_mode, tags=dec.reasons + ["operator"],
                      suggested_take=out.suggested_take)
-    draft.channel_ref = channel.send_draft(card)
+    if _auto_handoff(settings):
+        handoff_now(s, settings, draft, now, channel=channel, by="operator")
+    else:
+        draft.channel_ref = channel.send_draft(card)
     return draft
 
 
@@ -706,7 +725,7 @@ def reconcile_uncertain(s: Session, publisher, channel, now: datetime) -> int:
 
 
 def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now: datetime | None = None,
-                     publisher=None, channel=None) -> list[Post]:
+                     publisher=None, channel=None, only_draft_id: int | None = None) -> list[Post]:
     now = now or utcnow()
     channel = channel or _channel(settings)
     publisher = publisher or _publisher(settings, channel)
@@ -737,11 +756,12 @@ def publish_approved(s: Session, settings: Settings, stats: dict[str, Any], now:
             channel.delete_message(stale.channel_ref)
         event(s, "approval_expired", "draft", stale.id)
     # Strongest story first among what remains, then the most recently approved.
-    drafts = s.scalars(
-        select(Draft).join(Story, Draft.story_id == Story.id)
-        .where(Draft.status.in_(("approved", "approved_night")))
-        .order_by(Story.score.desc(), Draft.decided_at.desc())
-    ).all()
+    q = (select(Draft).join(Story, Draft.story_id == Story.id)
+         .where(Draft.status.in_(("approved", "approved_night")))
+         .order_by(Story.score.desc(), Draft.decided_at.desc()))
+    if only_draft_id is not None:
+        q = q.where(Draft.id == only_draft_id)
+    drafts = s.scalars(q).all()
     done: list[Post] = []
     manual = getattr(publisher, "name", "") == "manual"
     api = getattr(publisher, "name", "") == "x"
