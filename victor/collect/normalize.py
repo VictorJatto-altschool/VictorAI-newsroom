@@ -42,6 +42,7 @@ def clean_text(s: str | None) -> str:
     if not s:
         return ""
     s = _TAGS.sub(" ", html.unescape(s))
+    s = re.sub(r"[​‌‍⁠﻿]", "", s)  # zero-width characters, e.g. inside addresses X displays
     return _WS.sub(" ", s).strip()
 
 

@@ -35,6 +35,7 @@ HELP = """Commands:
 /thread [card number] [parts] - a ready-to-post thread on that card's story, or on the strongest story of the day
 /engage [n] - the strongest stories of the day with a reply drafted for each, to post under the accounts that broke them
 /people - one-tap X searches for accounts in the niche to follow, plus the follow-back routine
+/reply <link> [your angle] - a reply written for that post or article, ready to copy and post under it
 /connect [topic] - a fresh community post inviting people in the niche to introduce themselves and connect; post it any time
 /clearchat - delete every bot message except ready posts waiting for your Posted tap
 /story <link> [angle] - a story you found yourself becomes a ready post at once; an X post link is quoted so its video plays
@@ -397,6 +398,40 @@ def send_connect(s: Session, settings: Settings, tg, now: datetime, note: str = 
     return text
 
 
+def send_reply_for_link(s: Session, settings: Settings, tg, now: datetime, url: str, note: str = "", provider=None,
+                        page: dict | None = None) -> str | None:
+    """/reply <link>: read the post (and the article it links to), write one reply, send it with a Copy button."""
+    from ..ai.reply import generate_replies
+    from ..collect.manual import fetch_page
+    from ..pipeline import event
+
+    tg.notify("Reading that post and writing a reply; about twenty seconds.")
+    try:
+        page = page or fetch_page(url)
+    except Exception as e:  # noqa: BLE001
+        tg.notify(f"Could not read that link: {type(e).__name__}: {str(e)[:120]}")
+        return None
+    summary = page.get("description") or ""
+    if note:
+        summary += f"\n\nOperator note on the angle to take: {note[:200]}"
+    views = [SourceView(0, page.get("publisher") or url, 3, page.get("title") or url, summary, page.get("article_url") or url)]
+    provider = provider or pick_provider(settings.env, settings.drafting.get("provider_order", ["mock"]))
+    try:
+        reply = generate_replies(provider, settings.voice, [(page.get("title") or url, "tech", views)])[0]
+    except Exception as e:  # noqa: BLE001
+        tg.notify(f"Could not write the reply: {type(e).__name__}: {str(e)[:120]}. Try /reply again.")
+        return None
+    event(s, "reply_generated", url=url[:300], by="telegram")
+    target = page.get("x_post") or url
+    body = f"REPLY to: {(page.get('title') or url)[:120]}\n\n{reply}\n\nPost it under:\n{target}"
+    buttons = [[{"text": "Open the post", "url": target}], [{"text": "Copy reply", "copy_text": {"text": reply[:256]}}]]
+    if hasattr(tg, "send_with_buttons"):
+        tg.send_with_buttons(body[:4000], buttons)
+    else:
+        tg.notify(body[:4000])
+    return reply
+
+
 def people_message(settings: Settings) -> tuple[str, list[list[dict]]]:
     """/people: X search links (People tab) for the niche, and the follow routine that X allows."""
     from urllib.parse import quote
@@ -724,6 +759,12 @@ def _handle_message(s: Session, settings: Settings, tg, m: dict, now: datetime) 
         send_engage(s, settings, tg, now, n=max(1, min(10, n)))
     elif cmd == "/connect":
         send_connect(s, settings, tg, now, note=arg)
+    elif cmd == "/reply":
+        parts = arg.split(maxsplit=1)
+        if not parts or not parts[0].startswith("http"):
+            tg.notify("Usage: /reply <link to an X post or article> [what you want to say]")
+        else:
+            send_reply_for_link(s, settings, tg, now, parts[0], note=parts[1] if len(parts) > 1 else "")
     elif cmd == "/people":
         text, buttons = people_message(settings)
         if hasattr(tg, "send_with_buttons"):
