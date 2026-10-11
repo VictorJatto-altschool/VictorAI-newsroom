@@ -38,6 +38,15 @@ _HYPHENS = re.compile(r"[‑‐‒⁃]")
 _DASHES = re.compile(r"\s*[–—]\s*")
 
 
+# A sentence ends at . ! ? followed by a capital, digit, quote or opener emoji, but never after an abbreviation
+# such as "4 p.m. EDT", "U.S. labs", "e.g. this", "Dr. Who" or "vs. the rest".
+_SENTENCE_END = re.compile(
+    r"(?<![Aa]\.m\.)(?<![Pp]\.m\.)(?<!U\.S\.)(?<!U\.K\.)(?<!e\.g\.)(?<!i\.e\.)"
+    r"(?<!\bvs\.)(?<!\bDr\.)(?<!\bMr\.)(?<!\bMs\.)(?<!\bNo\.)(?<!\bSt\.)"
+    r"(?<=[.!?])\s+(?=[A-Z0-9\"'(🚨🗣])"
+)
+
+
 def clean_post_text(text: str) -> str:
     """Plain characters only, one space between words, at most one blank line between paragraphs, no trailing spaces."""
     t = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -55,7 +64,7 @@ def clean_post_text(text: str) -> str:
     text = "\n".join(out).strip()
     # A post written as one long paragraph is unreadable on X and has no hook line: break it at sentences.
     if "\n" not in text and len(text) > 140:
-        sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(🚨🗣])", text)
+        sentences = _SENTENCE_END.split(text)
         if len(sentences) > 1:
             text = "\n\n".join(s.strip() for s in sentences if s.strip())
     return text
