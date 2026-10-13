@@ -1,11 +1,14 @@
 """Turn a raw feed entry into clean, comparable fields. No network, no AI."""
 from __future__ import annotations
 
+import hashlib
 import html
 import re
 from datetime import datetime, timezone
 from time import mktime
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+MAX_CANONICAL_CHARS = 1500  # well under the ~2.7 KB a Postgres btree index entry may hold
 
 TRACKING_PARAMS = {
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
@@ -35,7 +38,12 @@ def canonical_url(url: str) -> str:
         host = host.rsplit(":", 1)[0]
     query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=False) if k.lower() not in TRACKING_PARAMS]
     path = re.sub(r"/+$", "", parts.path) or "/"
-    return urlunsplit((scheme, host, path, urlencode(sorted(query)), ""))
+    out = urlunsplit((scheme, host, path, urlencode(sorted(query)), ""))
+    if len(out) > MAX_CANONICAL_CHARS:
+        # Postgres caps a btree index entry at about 2.7 KB; a monster address keeps a stable, unique short form.
+        digest = hashlib.sha1(out.encode("utf-8")).hexdigest()[:16]
+        out = out[: MAX_CANONICAL_CHARS - 17] + "#" + digest
+    return out
 
 
 def clean_text(s: str | None) -> str:
