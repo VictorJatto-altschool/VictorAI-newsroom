@@ -29,8 +29,8 @@ def test_only_confirmed_and_fresh_handoffs_count(fresh_db, settings, now):
 
 def test_stale_handoffs_are_abandoned(fresh_db, settings, now):
     with session() as s:
-        _handoff(s, now - timedelta(hours=7))
-        _handoff(s, now - timedelta(hours=1))
+        _handoff(s, now - timedelta(hours=25))  # a day ignored: gone
+        _handoff(s, now - timedelta(hours=7))   # still on the phone
         assert abandon_stale_handoffs(s, ConsoleChannel(), now) == 1
         statuses = sorted(p.status for p in s.scalars(select(Post)).all())
         assert statuses == ["manual", "skipped"]

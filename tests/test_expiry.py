@@ -26,6 +26,7 @@ class FakeTelegramDel(FakeTelegram):
 def test_stale_pending_cards_are_deleted_and_expired(fresh_db, now):
     settings = _settings()
     settings.raw["publishing"]["prepare_media"] = False
+    settings.raw.setdefault("telegram", {})["card_ttl_minutes"] = 30  # this test exercises the sweep itself, at a short TTL
     tg = FakeTelegramDel()
     run_once(settings, now, fetcher=make_fetcher(now), provider=MockProvider(), channel=tg, publisher=MockPublisher(), check_links=False)
     with session() as s:

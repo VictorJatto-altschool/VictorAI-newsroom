@@ -307,7 +307,7 @@ def cluster_items(s: Session, new_items: list[Item], stats: dict[str, Any], now:
 
 
 HANDOFF_COUNTS_FOR_HOURS = 2    # a fresh hand-off counts as a post so spacing holds while you post it
-HANDOFF_ABANDON_HOURS = 6       # a hand-off ignored this long is treated as skipped
+HANDOFF_ABANDON_HOURS = 24      # a hand-off ignored this long is treated as skipped and leaves the chat
 
 
 def _recent_posts(s: Session, days: float, now: datetime) -> list[Post]:
@@ -459,31 +459,41 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
         .order_by(Story.score.desc())
     ).all()
     floor = float(settings.drafting.get("fallback_min_score", 0) or 0)
-    if not eligible and every and floor:
-        # The slot is open and nothing clears the bar: the strongest recent story goes instead of silence.
-        eligible = s.scalars(
+    if every and floor and len(eligible) < max(1, limit):
+        # The slot is open and too few stories clear the bar: the strongest recent ones fill the slot instead of
+        # silence. This is also where discoveries, research and developing stories get their turn.
+        seen = {st.id for st in eligible}
+        extra = s.scalars(
             select(Story).where(Story.status == "discovered", Story.score >= floor,
                                 Story.classification.in_(("breaking", "hot", "trending", "developing")),
                                 Story.last_updated_at >= now - timedelta(hours=6))
-            .order_by(Story.score.desc()).limit(3)
+            .order_by(Story.score.desc()).limit(12)
         ).all()
-        if eligible:
+        extra = [st for st in extra if st.id not in seen]
+        if extra:
             stats["fallback_used"] = True
+            eligible = eligible + extra
     if not eligible and every:
         _slot_passed_notice(s, settings, channel, now, every)
         stats.update(drafts_made=0, drafts_failed=0)
         return made
     recent_openers = [_opener(d.text) for d in s.scalars(select(Draft).order_by(Draft.id.desc()).limit(10)).all()]
     stats.update(drafts_made=0, drafts_failed=0)
+    diverse = bool(settings.drafting.get("second_card_different_category", True))
     for st in eligible:
         if limit and len(made) >= limit:
-            break
-        if every and made:
             break
         if st.id in hist.story_ids_recent:
             st.status = "skipped"
             event(s, "story_skipped", "story", st.id, reason="story_cooldown")
             continue
+        if diverse and made and st.category in {d.story.category for d in made}:
+            # The second card of a slot comes from a different corner of the niche when one is available:
+            # AI then robotics, space then chips, a launch then a discovery.
+            used = {d.story.category for d in made}
+            if any(e.category not in used and e.status == "discovered" and e.id not in hist.story_ids_recent
+                   for e in eligible if e is not st):
+                continue
         items = sorted((i for i in st.items if not i.filtered_reason), key=lambda i: _source_order(i, now))
         views = [SourceView(i.id, i.publisher or i.source.name, i.source.tier, i.title, i.summary, i.original_url) for i in items]
         try:
@@ -535,7 +545,24 @@ def draft_stories(s: Session, settings: Settings, stats: dict[str, Any], now: da
         made.append(draft)
         set_state(s, "last_card_at", now.isoformat())
         stats["drafts_made"] += 1
+    if every and made:
+        _maybe_slot_thread(s, settings, channel, now, provider)
     return made
+
+
+def _maybe_slot_thread(s: Session, settings: Settings, channel, now: datetime, provider) -> None:
+    """Every Nth slot also carries a thread on the strongest story of the day: a different shape, not just news."""
+    n = int(get_state(s, "slot_count", "0")) + 1
+    set_state(s, "slot_count", str(n))
+    te = int(settings.limits.get("thread_every_slots", 0) or 0)
+    if not te or n % te or not hasattr(channel, "send_with_buttons"):
+        return
+    from .channels.commands import send_thread
+
+    try:
+        send_thread(s, settings, channel, now, provider=provider)
+    except Exception as e:  # noqa: BLE001  a thread is a bonus; it never costs the slot
+        log.warning("slot thread failed: %s", e)
 
 
 def _slot_passed_notice(s: Session, settings: Settings, channel, now: datetime, every: int) -> None:
