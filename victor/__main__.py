@@ -427,11 +427,6 @@ def main(argv=None):
     args = p.parse_args(argv)
     args.fn(args)
 
-
-if __name__ == "__main__":
-    main()
-
-
 # ----------------------------------------------------------------------------- cycle health
 
 
@@ -461,3 +456,7 @@ def _note_cycle_ok(tg=None) -> None:
                     tg.notify("Collection is back after the failures; cards resume on the usual rhythm.")
     except Exception as e:  # noqa: BLE001
         print(f"could not reset the failure count: {e}", flush=True)
+
+
+if __name__ == "__main__":
+    main()
