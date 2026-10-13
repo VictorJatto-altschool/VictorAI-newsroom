@@ -1060,12 +1060,28 @@ def _run_cycle(settings, now, stats, timer, channel, provider, publisher, check_
             with timer("commands"):  # pick up anything that arrived during the cycle
                 stats["commands_handled"] += _commands(s, settings, channel, now, provider)
         except Exception as e:  # noqa: BLE001
-            run.error = f"{type(e).__name__}: {e}"[:1000]
+            err = f"{type(e).__name__}: {e}"[:1000]
             log.exception("run failed")
-            raise
-        finally:
             stats["timings"] = {**timer.stages, "total": timer.total()}
-            log.info("%s", timer.summary())
+            try:
+                s.rollback()  # the failed transaction would have taken this run's row down with it
+            except Exception:  # noqa: BLE001
+                pass
+            _record_failed_run(now, err, stats)
+            raise
+        else:
+            stats["timings"] = {**timer.stages, "total": timer.total()}
             run.finished_at = utcnow()
             run.stats = stats
+        finally:
+            log.info("%s", timer.summary())
     return stats
+
+
+def _record_failed_run(started_at: datetime, error: str, stats: dict[str, Any]) -> None:
+    """A failed cycle must leave a row behind: thirty hours of silent failures once went unnoticed."""
+    try:
+        with session() as s2:
+            s2.add(Run(started_at=started_at, finished_at=utcnow(), ok=False, error=error, stats=stats))
+    except Exception as e:  # noqa: BLE001
+        log.warning("could not record the failed run: %s", e)

@@ -245,6 +245,9 @@ def cmd_loop(args):
                   + (" (skipped: another cycle was running)" if skipped else ""), flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"{utcnow():%H:%M} cycle FAILED: {type(e).__name__}: {e}", flush=True)
+            _note_cycle_failure(tg, f"{type(e).__name__}: {e}")
+        else:
+            _note_cycle_ok(tg)
         # A skipped cycle (stale lock from an instance that was killed mid-cycle) retries in a minute, not in 15.
         deadline = time.time() + (60 if skipped else args.minutes * 60)
         try:  # /next and the slot notice quote the real next collection time from this
@@ -427,3 +430,34 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
+
+
+# ----------------------------------------------------------------------------- cycle health
+
+
+def _note_cycle_failure(tg, error: str) -> None:
+    """Count failures in a row; from the second one, tell the phone (at most once an hour) instead of failing quietly."""
+    try:
+        with session() as s:
+            n = int(get_state(s, "cycle_fail_count", "0")) + 1
+            set_state(s, "cycle_fail_count", str(n))
+            last = get_state(s, "cycle_fail_notified_at", "")
+            recently = bool(last) and (utcnow() - datetime.fromisoformat(last)) < timedelta(hours=1)
+            if n >= 2 and not recently and tg is not None:
+                tg.notify(f"Collection has failed {n} times in a row: {error[:200]}. "
+                          "Retrying every 15 minutes; cards resume on their own once it clears.")
+                set_state(s, "cycle_fail_notified_at", utcnow().isoformat())
+    except Exception as e:  # noqa: BLE001
+        print(f"could not record the failure: {e}", flush=True)
+
+
+def _note_cycle_ok(tg=None) -> None:
+    try:
+        with session() as s:
+            n = int(get_state(s, "cycle_fail_count", "0"))
+            if n:
+                set_state(s, "cycle_fail_count", "0")
+                if n >= 2 and tg is not None:
+                    tg.notify("Collection is back after the failures; cards resume on the usual rhythm.")
+    except Exception as e:  # noqa: BLE001
+        print(f"could not reset the failure count: {e}", flush=True)
